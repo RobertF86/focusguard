@@ -8,9 +8,10 @@ from statistics import median
 from ..config import ErkennungEinst
 from ..models import QUELLE_HANDY, HandyBeobachtung, KiUrteil, Status, Urteil, WebcamBeobachtung
 
-HANDY_LUECKE_S = 1.0          # so lange darf die Handy-Erkennung aussetzen, ohne den Lauf zu unterbrechen
+HANDY_LUECKE_S = 3.0          # so lange darf die Handy-Erkennung aussetzen, ohne den Lauf zu unterbrechen
+KOPF_LUECKE_S = 3.0           # ebenso für einzelne Bilder mit Kopf oben
 WEBCAM_VERALTET_S = 3.0       # ohne neue Bilder gilt die Webcam als stumm
-GESICHT_AKTUELL_S = 1.0       # Handy-Regeln nur, wenn eben noch ein Gesicht zu sehen war
+GESICHT_AKTUELL_S = 3.0       # Handy-Regeln nur, wenn eben noch ein Gesicht zu sehen war
 BASELINE_ANZAHL = 20
 KI_FEHLER_PAUSE_S = 30.0
 
@@ -28,6 +29,7 @@ class KameraBewerter:
         self._letztes_echtes_gesicht: float | None = None
         self._baseline_werte: list[float] = []
         self._gesenkt_seit: float | None = None
+        self._letztes_gesenkt: float | None = None
 
         self._handy_lauf_start: float | None = None
         self._letztes_handy: float | None = None
@@ -47,20 +49,17 @@ class KameraBewerter:
     def webcam(self, b: WebcamBeobachtung) -> None:
         self._letzte_webcam = b.zeit
         if not b.gesicht:
-            self._gesenkt_seit = None
             return
         self._letztes_gesicht = b.zeit
         self._letztes_echtes_gesicht = b.zeit
         if b.kopf_pitch_grad is None:
-            self._gesenkt_seit = None
             return
         if len(self._baseline_werte) < BASELINE_ANZAHL:
             self._baseline_werte.append(b.kopf_pitch_grad)
         if b.kopf_pitch_grad - self._baseline() > self._e.kopf_gesenkt_grad:
-            if self._gesenkt_seit is None:
+            if self._letztes_gesenkt is None or b.zeit - self._letztes_gesenkt > KOPF_LUECKE_S:
                 self._gesenkt_seit = b.zeit
-        else:
-            self._gesenkt_seit = None
+            self._letztes_gesenkt = b.zeit
 
     def handy(self, b: HandyBeobachtung) -> None:
         if not b.handy_erkannt:
@@ -80,7 +79,9 @@ class KameraBewerter:
                 and jetzt - self._handy_lauf_start >= self._e.handy_mindestdauer_sekunden)
 
     def _kopf_lange_gesenkt(self, jetzt: float) -> bool:
-        return self._gesenkt_seit is not None and jetzt - self._gesenkt_seit >= self._e.handy_mindestdauer_sekunden
+        return (self._gesenkt_seit is not None and self._letztes_gesenkt is not None
+                and jetzt - self._letztes_gesenkt <= KOPF_LUECKE_S
+                and jetzt - self._gesenkt_seit >= self._e.handy_mindestdauer_sekunden)
 
     def _gueltiges_ki_urteil(self, jetzt: float) -> KiUrteil | None:
         if self._ki_urteil is not None and jetzt - self._ki_zeit <= self._pruef_s:

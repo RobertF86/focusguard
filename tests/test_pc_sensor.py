@@ -29,3 +29,14 @@ def test_url_nur_bei_titelwechsel_und_nur_lesbare_browser():
     fenster["v"] = (8, 98, "firefox.exe", "C")
     [b] = s.schritt()
     assert b.url is None and len(aufrufe) == 2
+
+
+def test_eigenes_fenster_wiederholt_letzte_fremde_beobachtung():
+    uhr = {"t": 1.0}
+    fenster = {"v": (7, 99, "chrome.exe", "Insta")}
+    s = PcSensor(lambda: fenster["v"], lambda f, p: "https://instagram.com", lambda: uhr["t"], os.getpid())
+    s.schritt()
+    fenster["v"] = (1, os.getpid(), "python.exe", "FocusGuard")
+    uhr["t"] = 9.0
+    [b] = s.schritt()
+    assert (b.prozess, b.fenstertitel, b.fenster_id, b.domain, b.zeit) == ("chrome.exe", "Insta", 7, "instagram.com", 9.0)

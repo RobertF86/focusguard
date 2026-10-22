@@ -11,7 +11,8 @@ def test_seiten_schluessel():
 
 
 def test_eintrag_ebenen():
-    assert eintrag_fuer(YT, KiUrteil(Status.FOKUS, "ok", 0.9, "domain"), "k", 1.0).schluessel == "youtube.com"
+    docs = pc(url="https://docs.blender.org/x", titel="T")
+    assert eintrag_fuer(docs, KiUrteil(Status.FOKUS, "ok", 0.9, "domain"), "k", 1.0).schluessel == "docs.blender.org"
     assert eintrag_fuer(pc("firefox.exe", titel="T"), KiUrteil(Status.FOKUS, "ok", 0.9, "domain"), "k", 1.0).ebene == "seite"
     assert eintrag_fuer(YT, KiUrteil(Status.FOKUS, "ok", 0.9, "programm"), "k", 1.0).ebene == "seite"
     assert eintrag_fuer(pc("blender.exe"), KiUrteil(Status.FOKUS, "ok", 0.9, "programm"), "k", 1.0).schluessel == "blender.exe"
@@ -31,3 +32,10 @@ def test_quelle_fuer():
     assert quelle_fuer(mk("seite", "a|b")) == "seite:a|b"
     assert quelle_fuer(mk("domain", "a.com")) == "domain:a.com"
     assert quelle_fuer(mk("programm", "a.exe")) == "prozess:a.exe"
+
+
+def test_misch_plattform_nie_auf_domain_ebene():
+    u = KiUrteil(Status.ABGELENKT, "Suche", 0.9, "domain")
+    assert eintrag_fuer(YT, u, "k", 1.0).ebene == "seite"
+    assert eintrag_fuer(pc(url="https://news.google.de/x", titel="T"), u, "k", 1.0).ebene == "seite"
+    assert eintrag_fuer(pc(url="https://docs.blender.org/x", titel="T"), u, "k", 1.0).ebene == "domain"

@@ -47,6 +47,7 @@ class BlockerPort(Protocol):
 class KiRichterPort(Protocol):
     def einreihen(self, anfrage: KiAnfrage, aufgabe: str) -> None: ...
     def leeren(self) -> None: ...
+    def setze_bildschirm_pause(self, an: bool) -> None: ...
 
 
 def _leere(q: queue.SimpleQueue) -> list:
@@ -119,6 +120,15 @@ class Steuerung:
         sensoren = self._sensoren
         return sensoren.kamera_jpeg() if sensoren is not None else None
 
+    def aktuelle_pc(self) -> PcBeobachtung | None:
+        """Thread-sicher lesbar: das zuletzt beobachtete Vordergrundfenster der laufenden Session."""
+        entscheider = self._entscheider
+        return entscheider.letzte_pc if entscheider is not None else None
+
+    def _bildschirm_pause(self, an: bool) -> None:
+        if self._richter is not None:
+            self._richter.setze_bildschirm_pause(an)
+
     # --- Session -------------------------------------------------------------------------------
 
     def _ereignis(self, art: str, quelle: str = "", status: str = "", details: dict | None = None,
@@ -164,6 +174,7 @@ class Steuerung:
         if self._richter is not None:
             self._richter.leeren()
         self._ui.overlay_schliessen()
+        self._bildschirm_pause(False)
         self._gesperrt.clear()
         self._ui.icon("grau")
         self._ui.tooltip(KEINE_SESSION)
@@ -300,6 +311,7 @@ class Steuerung:
         elif isinstance(aktion, OverlayZeigen):
             text = f"{aktion.text}\nFokuszeit bisher: {self._fokus_minuten(jetzt)} min"
             self._ui.overlay_zeigen(f"Zurück zu: {aufgabe}", text, aktion.quelle)
+            self._bildschirm_pause(True)
             self._ereignis("eskalation", aktion.quelle, Status.ABGELENKT.value, {"stufe": 2}, zeit=jetzt)
         elif isinstance(aktion, Sperren):
             self._gesperrt.add(aktion.quelle)
@@ -307,9 +319,11 @@ class Steuerung:
             self._ereignis("sperre", aktion.quelle, zeit=jetzt)
         elif isinstance(aktion, HandyOverlay):
             self._ui.overlay_zeigen("Leg das Handy weg", f"Zurück zu: {aufgabe}", "handy")
+            self._bildschirm_pause(True)
             self._ereignis("eskalation", "handy", Status.ABGELENKT.value, {"stufe": 3}, zeit=jetzt)
         elif isinstance(aktion, OverlaySchliessen):
             self._ui.overlay_schliessen()
+            self._bildschirm_pause(False)
         elif isinstance(aktion, Begruessung):
             self._ui.hinweis(f"Du warst {aktion.minuten_weg} Minuten weg. Weiter mit {aufgabe}?")
         elif isinstance(aktion, IconStatus):

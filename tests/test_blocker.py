@@ -54,3 +54,18 @@ def test_blocker_minimiert_fenster_und_faengt_fehler():
 
     b2 = Blocker(NIE, TestUhr(0), kaputt, lambda: None, lambda: 5)
     assert b2.pruefe(pc("steam.exe", fenster_id=5), {"prozess:steam.exe"}, AufgabenListen()) == "fehler"
+
+
+def test_blocker_tab_nur_wenn_titel_noch_passt_und_ohne_shift_alt():
+    log = []
+    titel = {"t": "Fokus-Tab"}
+    taste = {"an": False}
+    b = Blocker(NIE, TestUhr(0), lambda h: None, lambda: log.append("w"), lambda: 1,
+                titel=lambda h: titel["t"], modifikator=lambda: taste["an"])
+    insta = pc(url="https://instagram.com", titel="Instagram", fenster_id=1)
+    assert b.pruefe(insta, {"domain:instagram.com"}, AufgabenListen()) is None and log == []
+    titel["t"] = "Instagram"
+    taste["an"] = True
+    assert b.pruefe(insta, {"domain:instagram.com"}, AufgabenListen()) is None and log == []
+    taste["an"] = False
+    assert b.pruefe(insta, {"domain:instagram.com"}, AufgabenListen()) == "tab_schliessen" and log == ["w"]

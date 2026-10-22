@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import urllib.request
 from pathlib import Path
 from typing import Callable
@@ -18,8 +19,12 @@ class ModellFehler(Exception):
     pass
 
 
-def _urlretrieve(url: str, ziel: Path) -> None:
-    urllib.request.urlretrieve(url, ziel)
+DOWNLOAD_TIMEOUT_S = 30
+
+
+def _herunterladen(url: str, ziel: Path) -> None:
+    with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_S) as antwort, open(ziel, "wb") as datei:
+        shutil.copyfileobj(antwort, datei)
 
 
 def stelle_modell_bereit(dateiname: str, url: str, ordner: Path,
@@ -28,7 +33,7 @@ def stelle_modell_bereit(dateiname: str, url: str, ordner: Path,
     ziel = ordner / dateiname
     if ziel.exists() and ziel.stat().st_size > 0:
         return ziel
-    herunterladen = herunterladen or _urlretrieve
+    herunterladen = herunterladen or _herunterladen
     teil = ziel.with_name(ziel.name + ".part")
     try:
         ordner.mkdir(parents=True, exist_ok=True)

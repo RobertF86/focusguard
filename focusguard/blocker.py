@@ -34,12 +34,15 @@ def sperr_aktion(b: PcBeobachtung, gesperrt: Iterable[str], nie_sperren: Iterabl
 
 class Blocker:
     def __init__(self, nie_sperren: Iterable[str], uhr: Uhr, minimiere: Callable[[int], None],
-                 strg_w: Callable[[], None], vordergrund: Callable[[], int]):
+                 strg_w: Callable[[], None], vordergrund: Callable[[], int],
+                 titel: Callable[[int], str] | None = None, modifikator: Callable[[], bool] | None = None):
         self._nie_sperren = tuple(nie_sperren)
         self._uhr = uhr
         self._minimiere = minimiere
         self._strg_w = strg_w
         self._vordergrund = vordergrund
+        self._titel = titel
+        self._modifikator = modifikator
         self._zuletzt = -math.inf
 
     def pruefe(self, b: PcBeobachtung, gesperrt: Iterable[str], fokus: AufgabenListen) -> str | None:
@@ -52,6 +55,13 @@ class Blocker:
         try:
             if self._vordergrund() != b.fenster_id:
                 return None
+            if aktion == "tab_schliessen":
+                # Die Beobachtung kann über eine Sekunde alt sein: nur schließen, wenn noch derselbe Tab vorne ist,
+                # und nie mit gedrückter Shift-/Alt-Taste (Strg+Shift+W schließt das ganze Fenster).
+                if self._titel is not None and self._titel(b.fenster_id) != b.fenstertitel:
+                    return None
+                if self._modifikator is not None and self._modifikator():
+                    return None
             self._zuletzt = jetzt
             if aktion == "tab_schliessen":
                 self._strg_w()
@@ -83,4 +93,16 @@ def windows_blocker(nie_sperren: Iterable[str], uhr: Uhr) -> Blocker:
 
         return win32gui.GetForegroundWindow()
 
-    return Blocker(nie_sperren, uhr, minimiere, strg_w, vordergrund)
+    def titel(hwnd: int) -> str:
+        import win32gui
+
+        return win32gui.GetWindowText(hwnd)
+
+    def modifikator() -> bool:
+        import win32api
+        import win32con
+
+        tasten = (win32con.VK_SHIFT, win32con.VK_MENU, win32con.VK_LWIN, win32con.VK_RWIN)
+        return any(win32api.GetAsyncKeyState(t) & 0x8000 for t in tasten)
+
+    return Blocker(nie_sperren, uhr, minimiere, strg_w, vordergrund, titel, modifikator)

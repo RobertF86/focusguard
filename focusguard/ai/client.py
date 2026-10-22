@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from ..clock import Uhr
-from ..models import AufgabenListen, KiAnfrage, KiArt, KiErgebnis
+from ..decision.memory import seiten_schluessel
+from ..models import AufgabenListen, KiAnfrage, KiArt, KiErgebnis, PcBeobachtung
 from .prompts import (STARTLISTEN_SCHEMA, SYSTEM_STARTLISTEN, SYSTEM_URTEIL, URTEIL_SCHEMA, KiAntwortFehler,
                       baue_anfrage, handy_inhalt, parse_startlisten, parse_urteil, seite_inhalt,
                       startlisten_inhalt, stichprobe_inhalt)
@@ -88,7 +89,8 @@ def _sicher(funktion, ersatz):
 
 class KiRichter:
     def __init__(self, sender: Sender, bilder: BildquellePort, modell: str, min_sicherheit: float,
-                 pro_minute: int, uhr: Uhr, ablage: Path | None = None):
+                 pro_minute: int, uhr: Uhr, ablage: Path | None = None,
+                 aktuelle_pc: Callable[[], PcBeobachtung | None] | None = None):
         self._sender = sender
         self._bilder = bilder
         self._modell = modell
@@ -96,6 +98,8 @@ class KiRichter:
         self._begrenzer = Ratenbegrenzer(pro_minute, uhr)
         self._uhr = uhr
         self._ablage = ablage
+        self._aktuelle_pc = aktuelle_pc
+        self._bildschirm_pause = False
         self._sperre = threading.Lock()
         self._schlange: list[tuple[int, KiAnfrage, str]] = []
         self._zaehler = itertools.count()
@@ -110,11 +114,34 @@ class KiRichter:
         with self._sperre:
             self._schlange.clear()
 
+    def setze_bildschirm_pause(self, an: bool) -> None:
+        """Solange ein Overlay offen ist, würden Screenshots nur das Overlay zeigen: solche Anfragen warten."""
+        with self._sperre:
+            self._bildschirm_pause = an
+
+    @staticmethod
+    def _braucht_bildschirm(a: KiAnfrage) -> bool:
+        return a.art is KiArt.SEITE or (a.art is KiArt.STICHPROBE and a.mit_bildschirm)
+
+    def _seite_veraltet(self, a: KiAnfrage) -> bool:
+        if a.art is not KiArt.SEITE or self._aktuelle_pc is None:
+            return False
+        jetzt_pc = _sicher(self._aktuelle_pc, None)
+        return jetzt_pc is None or seiten_schluessel(jetzt_pc) != seiten_schluessel(a.pc)
+
     def verarbeite_naechste(self) -> KiErgebnis | None:
         with self._sperre:
-            if not self._schlange or not self._begrenzer.versuche():
+            moeglich = [e for e in self._schlange
+                        if not (self._bildschirm_pause and self._braucht_bildschirm(e[1]))]
+            if not moeglich:
                 return None
-            eintrag = min(self._schlange, key=lambda e: (e[1].prioritaet, e[0]))
+            eintrag = min(moeglich, key=lambda e: (e[1].prioritaet, e[0]))
+            if self._seite_veraltet(eintrag[1]):
+                # Screenshot und Titel würden nicht mehr zusammenpassen; die Seite wird bei Bedarf neu angefragt.
+                self._schlange.remove(eintrag)
+                return KiErgebnis(eintrag[1], None, "Seite nicht mehr aktiv")
+            if not self._begrenzer.versuche():
+                return None
             self._schlange.remove(eintrag)
         _, anfrage, aufgabe = eintrag
         return self._sende(anfrage, aufgabe)

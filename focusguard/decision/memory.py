@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from .rules import ist_misch_plattform
 from ..models import (GedaechtnisEintrag, KiUrteil, PcBeobachtung, Status, quelle_domain, quelle_prozess,
                       quelle_seite)
 
@@ -16,7 +17,7 @@ def eintrag_fuer(b: PcBeobachtung, u: KiUrteil, aufgabe_key: str, zeit: float) -
     if u.status is Status.UNKLAR:
         return None
     ebene = u.gilt_fuer
-    if ebene == "domain" and not b.domain:
+    if ebene == "domain" and (not b.domain or ist_misch_plattform(b.domain)):
         ebene = "seite"
     if ebene == "programm" and b.ist_browser:
         ebene = "seite"

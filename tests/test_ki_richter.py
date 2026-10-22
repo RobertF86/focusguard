@@ -145,3 +145,28 @@ def test_anthropic_sender_refusal_und_max_tokens():
     for stop, bloecke in (("refusal", text), ("max_tokens", text), ("end_turn", [])):
         with pytest.raises(KiFehler):
             anthropic_sender(client(stop, bloecke))({})
+
+
+def test_bildschirm_pause_haelt_seite_und_stichprobe():
+    s = FakeSender()
+    r = richter(s)
+    r.setze_bildschirm_pause(True)
+    r.einreihen(anfrage(), "a")
+    r.einreihen(anfrage(KiArt.STICHPROBE, "stichprobe", wc=True), "a")
+    assert r.verarbeite_naechste() is None and s.aufrufe == []
+    r.einreihen(anfrage(KiArt.HANDY, "handy", bs=False, wc=True), "a")
+    assert r.verarbeite_naechste().anfrage.art is KiArt.HANDY
+    r.setze_bildschirm_pause(False)
+    assert r.verarbeite_naechste().anfrage.art is KiArt.SEITE
+
+
+def test_veraltete_seite_wird_verworfen_ohne_aufruf():
+    s = FakeSender()
+    r = KiRichter(s, FakeBilder(), "claude-haiku-5-5", 0.6, 2, TestUhr(0),
+                  aktuelle_pc=lambda: pc(url="https://b.org", titel="anders"))
+    r.einreihen(anfrage(), "a")
+    e = r.verarbeite_naechste()
+    assert e.urteil is None and e.fehler == "Seite nicht mehr aktiv" and s.aufrufe == []
+    r.einreihen(anfrage(KiArt.HANDY, "handy", bs=False, wc=True), "a")
+    r.einreihen(anfrage(KiArt.STICHPROBE, "stichprobe", wc=True), "a")
+    assert r.verarbeite_naechste() is not None and r.verarbeite_naechste() is not None   # no rate slot used

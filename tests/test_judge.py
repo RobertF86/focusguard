@@ -121,3 +121,30 @@ def test_korrekturen():
     listen, eintrag = e.korrektur("seite:example.org|T", 2)
     assert listen is None and (eintrag.ebene, eintrag.status) == ("seite", Status.FOKUS)
     assert e.korrektur("handy", 3) == (None, None)
+
+
+def _bestaetigte_stichprobe():
+    e = ent()
+    e.pc(pc("blender.exe", zeit=119))
+    [a] = e.ki_anfragen(120)
+    ki(e, a, Status.ABGELENKT, 125)
+    e.pc(pc("blender.exe", zeit=155))
+    [b] = e.ki_anfragen(155)
+    ki(e, b, Status.ABGELENKT, 156)
+    return e
+
+
+def test_stichprobe_fehler_beendet_bestaetigung():
+    e = _bestaetigte_stichprobe()
+    e.pc(pc("blender.exe", zeit=186))
+    [c] = e.ki_anfragen(186)
+    e.ki_ergebnis(KiErgebnis(c, None, "Netz weg"), 187)
+    assert e.urteil(187).status is Status.FOKUS
+
+
+def test_stichprobe_bestaetigung_laeuft_ab():
+    e = _bestaetigte_stichprobe()
+    e.pc(pc("blender.exe", zeit=200))
+    assert e.urteil(200).quelle == "stichprobe"
+    e.pc(pc("blender.exe", zeit=217))
+    assert e.urteil(217).status is Status.FOKUS

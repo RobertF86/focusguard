@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 
-from ..decision.rules import domain_aus_url
+from ..decision.rules import MISCH_PLATTFORMEN, domain_aus_url, ist_misch_plattform  # noqa: F401
 from ..models import AufgabenListen, KiUrteil, PcBeobachtung, Status
 
 SYSTEM_URTEIL = """\
@@ -43,10 +43,6 @@ STARTLISTEN_SCHEMA = {
     "required": list(_LISTEN),
     "additionalProperties": False,
 }
-
-MISCH_PLATTFORMEN = frozenset({"youtube.com", "reddit.com", "x.com", "twitter.com", "google.com", "bing.com",
-                               "duckduckgo.com"})
-
 
 class KiAntwortFehler(Exception):
     pass
@@ -141,10 +137,6 @@ def parse_urteil(text: str, min_sicherheit: float) -> KiUrteil:
     return KiUrteil(s, begruendung.strip(), sicherheit, gilt_fuer)
 
 
-def _ist_misch_plattform(domain: str) -> bool:
-    return domain in MISCH_PLATTFORMEN or domain.startswith("google.")
-
-
 def parse_startlisten(text: str) -> AufgabenListen:
     daten = _lade_json_objekt(text)
     werte: dict[str, tuple[str, ...]] = {}
@@ -158,7 +150,7 @@ def parse_startlisten(text: str) -> AufgabenListen:
                 continue
             if name.endswith("domains"):
                 wert = domain_aus_url(eintrag)
-                if wert is None or _ist_misch_plattform(wert):
+                if wert is None or ist_misch_plattform(wert):
                     continue
             else:
                 wert = eintrag.strip().lower()

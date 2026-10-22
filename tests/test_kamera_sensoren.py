@@ -89,3 +89,17 @@ def test_modell_einmal_laden(tmp_path):
 
     with pytest.raises(ModellFehler):
         stelle_modell_bereit("n.task", "https://x/n.task", tmp_path, kaputt)
+
+
+def test_standard_download_mit_timeout(tmp_path, monkeypatch):
+    import io
+    from focusguard.sensors import modelle
+    gesehen = {}
+
+    def urlopen(url, timeout=None):
+        gesehen["timeout"] = timeout
+        return io.BytesIO(b"daten")
+
+    monkeypatch.setattr(modelle.urllib.request, "urlopen", urlopen)
+    p = stelle_modell_bereit("x.task", "https://x/x.task", tmp_path)
+    assert p.read_bytes() == b"daten" and gesehen["timeout"] == 30

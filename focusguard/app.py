@@ -6,6 +6,7 @@ import argparse
 import importlib
 import os
 import platform
+import subprocess
 import sys
 import threading
 import time
@@ -130,14 +131,28 @@ def kamera_test() -> int:
 
 # --- Tray-App --------------------------------------------------------------------------------------
 
+def oeffne_einstellungen(pfad, plattform: str | None = None, starte=None, oeffne_url=None) -> None:
+    """Unter Windows ist .toml meist keinem Programm zugeordnet, daher immer Notepad."""
+    plattform = plattform or sys.platform
+    if plattform == "win32":
+        (starte or subprocess.Popen)(["notepad.exe", str(pfad)])
+        return
+    if oeffne_url is None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(pfad)))
+    else:
+        oeffne_url(pfad)
+
+
 class _KeinBlocker:
     def pruefe(self, b, gesperrt, fokus):
         return None
 
 
 def starte_app() -> int:
-    from PySide6.QtCore import QFileSystemWatcher, QTimer, QUrl
-    from PySide6.QtGui import QDesktopServices
+    from PySide6.QtCore import QFileSystemWatcher, QTimer
     from PySide6.QtWidgets import QApplication
 
     from .ai.client import KiRichter, anthropic_sender
@@ -171,7 +186,8 @@ def starte_app() -> int:
     if os.environ.get("ANTHROPIC_API_KEY"):
         richter = KiRichter(anthropic_sender(), Bildschirm(lambda: st().kamera_jpeg()), einst.ki.modell,
                             einst.ki.min_sicherheit, einst.ki.max_aufrufe_pro_minute, time.time,
-                            ablage=ordner / "bilder" if einst.ki.bilder_speichern else None)
+                            ablage=ordner / "bilder" if einst.ki.bilder_speichern else None,
+                            aktuelle_pc=lambda: st().aktuelle_pc())
     else:
         meldungen.append("ANTHROPIC_API_KEY fehlt – FocusGuard läuft nur mit Regeln.")
     blocker = windows_blocker(einst.listen.nie_sperren, time.time) if sys.platform == "win32" else _KeinBlocker()
@@ -216,7 +232,7 @@ def starte_app() -> int:
     tray = Tray(sensoren=(einst.sensoren.pc, einst.sensoren.webcam, einst.sensoren.smartphone),
                 bei_start=bei_start, bei_ende=bei_ende, bei_sensor=bei_sensor,
                 bei_aufheben=lambda: st().sperren_aufheben(),
-                bei_einstellungen=lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(einst_pfad))),
+                bei_einstellungen=lambda: oeffne_einstellungen(einst_pfad),
                 bei_auswertung=bei_auswertung, bei_beenden=bei_beenden,
                 zurueck=lambda: st().zurueck_zur_aufgabe(), gehoert=lambda q: st().gehoert_zur_aufgabe(q))
     steuerung = Steuerung(einst, speicher, tray, lambda aus, feh: standard_verwaltung(aus, feh, ordner), blocker,

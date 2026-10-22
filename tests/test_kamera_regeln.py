@@ -109,3 +109,19 @@ def test_handy_frei_seit():
     k.handy(H(10, True, 0.9))
     k.handy(H(11, False, 0.1))
     assert k.handy_frei_seit(16) == 6
+
+
+def test_handy_ablenkung_uebersteht_aussetzer():
+    k = kb()
+    gesichter(k, 0, 10)
+    t = 10.5
+    while t <= 20.0:
+        k.webcam(W(t, True, 5 if t == 14.0 else 30))           # ein Bild mit Kopf oben
+        if t not in (12.0, 12.5, 13.0):                         # 1,5 s ohne Handy-Erkennung
+            k.handy(H(t, True, 0.8))
+        if t >= 13.5:
+            assert k.urteil(t).status is Status.ABGELENKT, t
+        t += 0.5
+    for t in (21.0, 22.0, 23.0, 24.0):
+        k.webcam(W(t, True, 5))
+    assert k.urteil(24.0) is None

@@ -68,7 +68,7 @@ Doppelklick auf `start_focusguard.bat`. Rechts unten in der Taskleiste erscheint
 | Session beenden | beendet sofort (wird als „vorzeitig beendet“ vermerkt) |
 | PC / Webcam / Smartphone | welche Überwachung läuft; wirkt sofort und wird gespeichert |
 | Sperren aufheben | hebt alle Sperren der laufenden Session auf |
-| Einstellungen … | öffnet `settings.toml`; Änderungen gelten ab der nächsten Session |
+| Einstellungen … | öffnet `settings.toml` in Notepad; Änderungen gelten ab der nächsten Session (Modell, KI-Limits, `bilder_speichern` und `nie_sperren` erst nach einem Neustart von FocusGuard) |
 | Auswertung … | letzte Session und die letzten 7 Tage |
 | Beenden | schließt FocusGuard sofort |
 
@@ -108,12 +108,14 @@ selbst ausprobieren:
 3. Das Tray-Icon erscheint grau, das Menü zeigt alle Einträge, die Checkboxen bleiben nach einem Neustart erhalten.
 4. Session „Blender lernen“ mit 25 Minuten starten: Die Listen-Seite zeigt KI-Vorschläge.
 5. Blender im Vordergrund → Icon bleibt grün. Chrome mit docs.blender.org → grün.
-6. instagram.com in Chrome, Edge und Firefox → nach ca. 10 s Hinweis, nach ca. 40 s Overlay auf allen Monitoren,
-   nach ca. 70 s wird der Tab geschlossen.
+6. instagram.com in Chrome und Edge → nach ca. 10 s Hinweis, nach ca. 40 s Overlay auf allen Monitoren,
+   nach ca. 70 s wird der Tab geschlossen. In Firefox kann FocusGuard die Adresse nicht auslesen; dort entscheidet die
+   KI anhand von Fenstertitel und Screenshot, deshalb kommt der erste Hinweis einige Sekunden später.
 7. „Gehört zur Aufgabe“ im Overlay → die Seite bleibt für diese Aufgabe erlaubt.
 8. YouTube-Tutorial zu Blender und ein beliebiges anderes Video → unterschiedliche Urteile (siehe Auswertung).
-9. Handy in die Hand nehmen und 3 s nach unten schauen → Hinweis. Weitermachen → Overlay „Leg das Handy weg“,
-   das 5 s nach dem Weglegen verschwindet.
+9. Handy in die Hand nehmen und nach unten schauen → nach ca. 3 s gilt das als Ablenkung, nach weiteren 10 s kommt
+   der Hinweis (also nach ca. 13 s). Weitermachen → Overlay, nach ca. 73 s das Overlay „Leg das Handy weg“, das etwa
+   8 s nach dem Weglegen verschwindet.
 10. 6 Minuten weggehen → Icon blau, beim Zurückkommen eine Begrüßung.
 11. Video auf dem zweiten Monitor, Blender im Vordergrund → wird innerhalb von ca. 2,5 Minuten erkannt.
 12. Kamera durch ein anderes Programm belegen (z. B. Teams-Anruf) → Tooltip zeigt „Kamera nicht verfügbar“, keine

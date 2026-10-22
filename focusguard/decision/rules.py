@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Iterable
 from urllib.parse import urlsplit
 
@@ -9,6 +10,10 @@ from ..config import ListenEinst
 from ..models import AufgabenListen, PcBeobachtung, Status, Urteil, quelle_domain, quelle_prozess
 
 BROWSER_PROZESSE = frozenset({"chrome.exe", "msedge.exe", "brave.exe", "firefox.exe", "opera.exe", "vivaldi.exe"})
+
+# Plattformen mit gemischtem Inhalt werden immer seitenweise beurteilt, nie als ganze Domain.
+MISCH_PLATTFORMEN = frozenset({"youtube.com", "reddit.com", "x.com", "twitter.com", "google.com", "bing.com",
+                               "duckduckgo.com"})
 
 
 def domain_aus_url(url: str | None) -> str | None:
@@ -24,6 +29,11 @@ def domain_aus_url(url: str | None) -> str | None:
     if host.startswith("www."):
         host = host[4:]
     return host or None
+
+
+def ist_misch_plattform(domain: str) -> bool:
+    d = domain.lower()
+    return domain_passt(d, MISCH_PLATTFORMEN) or re.search(r"(^|\.)google\.[a-z.]+$", d) is not None
 
 
 def domain_passt(domain: str, liste: Iterable[str]) -> bool:

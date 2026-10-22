@@ -44,13 +44,16 @@ class FakeBlocker:
 
 class FakeRichter:
     def __init__(self):
-        self.anfragen, self.geleert = [], False
+        self.anfragen, self.geleert, self.pausen = [], False, []
 
     def einreihen(self, a, aufgabe):
         self.anfragen.append(a)
 
     def leeren(self):
         self.geleert = True
+
+    def setze_bildschirm_pause(self, an):
+        self.pausen.append(an)
 
 
 def aufbau(dauer=50, richter=True):
@@ -157,3 +160,12 @@ def test_ki_ergebnis_nach_sessionende_ignoriert():
     st.beende_session(vorzeitig=True)
     st.ki_ergebnis(KiErgebnis(a, KiUrteil(Status.FOKUS, "x", 0.9, "seite"), None))
     st.tick()  # must not raise
+
+
+def test_overlay_pausiert_bildschirm_anfragen():
+    st, u, ui, sens, bl, r = aufbau()
+    ticks(st, u, 41, lambda t: pc(url="https://instagram.com", zeit=t))
+    assert r.pausen[-1] is True
+    ticks(st, u, 1, lambda t: pc("blender.exe", zeit=t))
+    assert r.pausen[-1] is False
+    assert st.aktuelle_pc().prozess == "blender.exe"

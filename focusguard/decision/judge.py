@@ -49,6 +49,7 @@ class Entscheider:
         self._sp_naechste = start + einst.ki.stichprobe_sekunden
         self._sp_verdacht_start: float | None = None
         self._sp_begruendung = ""
+        self._sp_bestaetigt_bis = -math.inf   # ohne neue Bestätigung endet die Stichproben-Ablenkung
 
     @property
     def listen(self) -> AufgabenListen:
@@ -83,16 +84,18 @@ class Entscheider:
             return Urteil(e.status, quelle_fuer(e), e.begruendung, "gedaechtnis")
         return Urteil(Status.UNKLAR, quelle_seite(seiten_schluessel(b)), "Noch nicht beurteilt", "lokal")
 
-    def _stichprobe_urteil(self) -> Urteil | None:
-        if self._sp_zustand != "bestaetigt":
+    def _stichprobe_urteil(self, jetzt: float) -> Urteil | None:
+        if self._sp_zustand != "bestaetigt" or jetzt > self._sp_bestaetigt_bis:
             return None
         return Urteil(Status.ABGELENKT, QUELLE_STICHPROBE, self._sp_begruendung, "ki", seit=self._sp_verdacht_start)
 
     def urteil(self, jetzt: float) -> Urteil:
-        return _hoechstes([self._pc_urteil(jetzt), self.kamera.urteil(jetzt), self._stichprobe_urteil()])
+        return _hoechstes([self._pc_urteil(jetzt), self.kamera.urteil(jetzt), self._stichprobe_urteil(jetzt)])
 
     def ki_anfragen(self, jetzt: float) -> list[KiAnfrage]:
         neu: list[KiAnfrage] = []
+        if self._sp_zustand == "bestaetigt" and jetzt > self._sp_bestaetigt_bis:
+            self._stichprobe_zuruecksetzen(jetzt, KI_FEHLER_PAUSE_S)    # Nachprüfung überfällig: zu deinen Gunsten
         pc_u = self._pc_urteil(jetzt)
         if pc_u is not None and pc_u.status is Status.UNKLAR and pc_u.herkunft == "lokal":
             q = pc_u.quelle
@@ -135,7 +138,7 @@ class Entscheider:
 
     def _stichprobe_ergebnis(self, a: KiAnfrage, e: KiErgebnis, jetzt: float) -> None:
         if e.urteil is None:
-            self._sp_naechste = jetzt + KI_FEHLER_PAUSE_S
+            self._stichprobe_zuruecksetzen(jetzt, KI_FEHLER_PAUSE_S)    # KI nicht erreichbar: zu deinen Gunsten
             return
         if e.urteil.status is Status.ABGELENKT:
             if self._sp_zustand == "ruhig":
@@ -145,13 +148,14 @@ class Entscheider:
                 self._sp_zustand = "bestaetigt"
             self._sp_begruendung = e.urteil.begruendung
             self._sp_naechste = jetzt + self._einst.ki.stichprobe_nachpruefung_sekunden
+            self._sp_bestaetigt_bis = jetzt + 2 * self._einst.ki.stichprobe_nachpruefung_sekunden
         else:
             self._stichprobe_zuruecksetzen(jetzt)
 
-    def _stichprobe_zuruecksetzen(self, jetzt: float) -> None:
+    def _stichprobe_zuruecksetzen(self, jetzt: float, pause_s: float | None = None) -> None:
         self._sp_zustand = "ruhig"
         self._sp_verdacht_start = None
-        self._sp_naechste = jetzt + self._einst.ki.stichprobe_sekunden
+        self._sp_naechste = jetzt + (self._einst.ki.stichprobe_sekunden if pause_s is None else pause_s)
 
     def korrektur(self, quelle: str, jetzt: float) -> tuple[AufgabenListen | None, GedaechtnisEintrag | None]:
         if quelle.startswith("domain:"):

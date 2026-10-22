@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Callable
 
 from ..clock import Uhr
@@ -25,6 +26,7 @@ class PcSensor:
         self._eigene_pid = eigene_pid
         self._url_schluessel: tuple[int, str] | None = None
         self._url: str | None = None
+        self._letzte: PcBeobachtung | None = None
 
     def schritt(self) -> list[PcBeobachtung]:
         vorne = self._lies_vordergrund()
@@ -32,7 +34,8 @@ class PcSensor:
             return []
         fenster_id, pid, prozess, titel = vorne
         if pid == self._eigene_pid:
-            return []
+            # Eigene Fenster (Overlay, Dialoge) werden nie beurteilt: das zuletzt aktive fremde Fenster gilt weiter.
+            return [replace(self._letzte, zeit=self._uhr())] if self._letzte is not None else []
         url = None
         if prozess.lower() in URL_LESBAR:
             schluessel = (fenster_id, titel)
@@ -43,7 +46,8 @@ class PcSensor:
                 except Exception:
                     self._url = None
             url = self._url
-        return [beobachtung_aus(self._uhr(), fenster_id, prozess, titel, url)]
+        self._letzte = beobachtung_aus(self._uhr(), fenster_id, prozess, titel, url)
+        return [self._letzte]
 
 
 def windows_vordergrund() -> tuple[int, int, str, str] | None:
