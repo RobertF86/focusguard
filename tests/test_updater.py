@@ -175,3 +175,11 @@ def test_main_starten_nicht_doppelt(tmp_path, monkeypatch):
     monkeypatch.setattr(updater.time, "sleep", lambda s: None)
     assert updater.main(["--starten", "--ziel", str(tmp_path)]) == 0
     assert gestartet == []
+
+
+def test_verknuepfungen_nur_unter_windows(tmp_path, monkeypatch):
+    b = Befehle()
+    monkeypatch.setattr(updater.sys, "platform", "linux")
+    assert updater.erstelle_verknuepfungen(tmp_path, b) is False and b.liste == []
+    monkeypatch.setattr(updater.sys, "platform", "win32")
+    assert updater.erstelle_verknuepfungen(tmp_path, b) is True and len(b.liste) == 1

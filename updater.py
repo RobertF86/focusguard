@@ -314,9 +314,11 @@ def verknuepfungen_befehl(root: Path) -> list[str]:
     return ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", skript]
 
 
-def erstelle_verknuepfungen(root: Path, ausfuehren=fuehre_aus) -> None:
-    if sys.platform == "win32":
-        ausfuehren(verknuepfungen_befehl(root))
+def erstelle_verknuepfungen(root: Path, ausfuehren=fuehre_aus) -> bool:
+    if sys.platform != "win32":
+        return False
+    ausfuehren(verknuepfungen_befehl(root))
+    return True
 
 
 def lies_api_schluessel() -> str | None:
@@ -389,8 +391,8 @@ def installieren(root: Path, branch: str | None) -> int:
     except UpdateFehler:
         print("(Die mit [FEHLT] markierten Punkte kannst du später beheben.)")
     try:
-        erstelle_verknuepfungen(root)
-        print("\nVerknüpfungen „FocusGuard“ und „FocusGuard aktualisieren“ liegen auf dem Desktop und im Startmenü.")
+        if erstelle_verknuepfungen(root):
+            print("\nVerknüpfungen „FocusGuard“ und „FocusGuard aktualisieren“ liegen auf dem Desktop und im Startmenü.")
     except UpdateFehler as e:
         print(f"\nVerknüpfungen konnten nicht angelegt werden: {e}")
     print("\nFertig! Starte FocusGuard über die Verknüpfung „FocusGuard“ auf dem Desktop.")
@@ -449,6 +451,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--branch", help="GitHub-Branch, von dem Updates kommen")
     parser.add_argument("--ziel", type=Path, help="Installationsordner (Standard: %%LOCALAPPDATA%%\\Programs\\FocusGuard)")
     args = parser.parse_args(argv)
+    try:
+        sys.stdout.reconfigure(line_buffering=True)   # Meldungen erscheinen in der richtigen Reihenfolge mit pip
+    except (AttributeError, ValueError):
+        pass
     try:
         if args.installieren:
             return installieren(args.ziel or standard_wurzel(), args.branch)
