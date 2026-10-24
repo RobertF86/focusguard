@@ -19,12 +19,20 @@ from .models import aufgabe_key
 TICK_MS = 250
 KI_LEERLAUF_S = 0.5
 
+# Alle Module, die die Tray-App beim Start braucht. Der Updater ruft `--importtest` nach jedem Update auf
+# und rollt zurück, wenn hier etwas nicht lädt.
+APP_MODULE = ("focusguard.steuerung", "focusguard.storage", "focusguard.ui.tray", "focusguard.ui.start_dialog",
+              "focusguard.blocker", "focusguard.capture", "focusguard.sensors.verwaltung", "focusguard.ai.client")
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="focusguard", description="FocusGuard – dein Fokus-Wächter")
     parser.add_argument("--pruefen", action="store_true", help="Installation prüfen und Modelle herunterladen")
     parser.add_argument("--kamera-test", action="store_true", help="Gesicht, Kopfneigung und Handy live anzeigen")
+    parser.add_argument("--importtest", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.importtest:
+        return importtest()
     if args.pruefen:
         return pruefen()
     if args.kamera_test:
@@ -50,6 +58,22 @@ def _zeile(ok: bool, name: str, grund: str = "") -> bool:
     return ok
 
 
+def _importiere_app_module() -> None:
+    for modul in APP_MODULE:
+        importlib.import_module(modul)
+
+
+def importtest() -> int:
+    try:
+        _importiere_app_module()
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        return 1
+    return 0
+
+
 def pruefen() -> int:
     from .sensors.modelle import GESICHT_MODELL, OBJEKT_MODELL, ModellFehler, stelle_modell_bereit
 
@@ -65,6 +89,13 @@ def pruefen() -> int:
         except Exception as e:
             ok, grund = False, repr(e)
         alles_ok = _zeile(ok, f"Paket {paket}", grund) and alles_ok
+
+    try:
+        _importiere_app_module()
+        ok, grund = True, ""
+    except Exception as e:
+        ok, grund = False, repr(e)
+    alles_ok = _zeile(ok, "FocusGuard-Module", grund) and alles_ok
 
     alles_ok = _zeile(bool(os.environ.get("ANTHROPIC_API_KEY")), "ANTHROPIC_API_KEY gesetzt",
                       'Umgebungsvariable fehlt – setx ANTHROPIC_API_KEY "…" und neues Terminal öffnen') and alles_ok

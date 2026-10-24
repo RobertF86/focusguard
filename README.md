@@ -27,11 +27,12 @@ Python musst du nicht selbst installieren, das erledigt der Installer.
 
 1. Die Datei **`FocusGuard-installieren.bat`** herunterladen:
    <https://raw.githubusercontent.com/RobertF86/ScriptCollection/refs/heads/claude/serene-hamilton-sjzb16/FocusGuard/FocusGuard-installieren.bat>
-   (im Browser Rechtsklick → „Speichern unter …“, oder Strg+S).
+   (im Browser Rechtsklick → „Speichern unter …“, oder Strg+S). Warnt der Browser, die Datei könnte schädlich sein,
+   auf „Behalten“ klicken.
 2. Doppelklick auf die Datei. Zeigt Windows „Der Computer wurde durch Windows geschützt“, auf
    „Weitere Informationen“ → „Trotzdem ausführen“ klicken.
 3. Der Installer erledigt dann alles:
-   - installiert Python 3.12, falls es fehlt (über `winget`, ohne Admin-Rechte),
+   - installiert Python 3.13, falls kein passendes Python da ist (über `winget`, ohne Admin-Rechte),
    - installiert FocusGuard nach `%LOCALAPPDATA%\Programs\FocusGuard`,
    - installiert alle Pakete (beim ersten Mal einige Minuten),
    - fragt nach deinem API-Schlüssel und speichert ihn,
@@ -43,7 +44,8 @@ Den Installer kannst du jederzeit erneut ausführen, zum Beispiel um eine kaputt
 ## Updates
 
 - **Automatisch:** Die Verknüpfung „FocusGuard“ prüft bei jedem Start, ob es eine neue Version gibt, spielt sie ein
-  und startet dann. Ohne Internet startet einfach die vorhandene Version.
+  und startet dann. Ohne Internet startet einfach die vorhandene Version. Lässt sich eine neue Version nicht
+  einspielen oder startet sie nicht, bleibt automatisch die bisherige Version aktiv.
 - **Von Hand:** „FocusGuard aktualisieren“. Läuft FocusGuard gerade, wartet das Fenster, bis du es über das
   Tray-Symbol beendest.
 - **Welche Version läuft?** Steht in der ersten Zeile von `--pruefen` (siehe unten) und in
@@ -52,6 +54,9 @@ Den Installer kannst du jederzeit erneut ausführen, zum Beispiel um eine kaputt
   (gerade `claude/serene-hamilton-sjzb16`). Nach dem Merge dort `"branch": "master"` eintragen.
 
 Deine Einstellungen und Daten liegen getrennt in `%APPDATA%\FocusGuard\` und bleiben bei Updates erhalten.
+
+**Wenn FocusGuard nicht startet oder abstürzt:** Alle Meldungen der App stehen in `%APPDATA%\FocusGuard\start.log`.
+Stürzt sie direkt beim Start ab, zeigt das Startfenster die letzten Zeilen an. Bitte schick mir diese Zeilen mit.
 
 ## Prüfen und Kamera-Test
 
@@ -75,8 +80,12 @@ deutlich **steigen**. Hältst du dein Handy in die Kamera, sollte der Handy-Wert
 
 ## Deinstallieren
 
-Den Ordner `%LOCALAPPDATA%\Programs\FocusGuard` und die beiden Verknüpfungen löschen. Deine Daten liegen in
-`%APPDATA%\FocusGuard`; lösch den Ordner, wenn du sie nicht mehr brauchst.
+1. FocusGuard über das Tray-Symbol → „Beenden“ schließen.
+2. Den Ordner `%LOCALAPPDATA%\Programs\FocusGuard` löschen.
+3. Die Verknüpfungen „FocusGuard“ und „FocusGuard aktualisieren“ vom Desktop löschen, dazu den Startmenü-Ordner
+   „FocusGuard“ (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\FocusGuard`).
+4. Optional: deine Daten in `%APPDATA%\FocusGuard` löschen und den API-Schlüssel entfernen mit
+   `reg delete HKCU\Environment /v ANTHROPIC_API_KEY /f`.
 
 ## Starten
 

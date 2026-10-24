@@ -94,7 +94,8 @@ def test_tausche_ein_ersetzt_app_und_raeumt_auf(tmp_path):
     (tmp_path / "app.alt").mkdir()                       # Rest eines früheren Updates
     tausche_ein(tmp_path)
     assert (tmp_path / "app" / "neu.txt").exists() and not (tmp_path / "app" / "alt.txt").exists()
-    assert not (tmp_path / "app.neu").exists() and not (tmp_path / "app.alt").exists()
+    assert not (tmp_path / "app.neu").exists()
+    assert (tmp_path / "app.alt" / "alt.txt").exists()     # bleibt für das Zurückrollen, bis das Update geklappt hat
 
 
 def test_wende_an_erstinstallation(tmp_path):
@@ -104,6 +105,7 @@ def test_wende_an_erstinstallation(tmp_path):
     vpy = str(venv_python(tmp_path))
     assert b.liste[0] == ["/usr/bin/python3", "-m", "venv", str(tmp_path / ".venv")]
     assert b.liste[1] == [vpy, "-m", "pip", "install", "-e", str(tmp_path / "app")]
+    assert b.liste[2] == [vpy, "-m", "focusguard", "--importtest"]
     assert (tmp_path / "updater.py").read_text() == "# neuer updater\n"
     v = lade_version(tmp_path)
     assert v["sha"] == SHA and v["nachricht"] == "Neu" and v["pyproject"]
@@ -115,7 +117,8 @@ def test_wende_an_ohne_neue_abhaengigkeiten_kein_pip(tmp_path):
     venv_python(tmp_path).write_text("")
     b = Befehle()
     assert wende_an(tmp_path, lade_konfig_standard(), Stand("b" * 40, "y"), lambda url, timeout: APP_ZIP, b, "py") is False
-    assert b.liste == [] and lade_version(tmp_path)["sha"] == "b" * 40
+    assert b.liste == [[str(venv_python(tmp_path)), "-m", "focusguard", "--importtest"]]
+    assert lade_version(tmp_path)["sha"] == "b" * 40
 
 
 def test_pip_fehler_speichert_keine_version(tmp_path):
@@ -183,3 +186,102 @@ def test_verknuepfungen_nur_unter_windows(tmp_path, monkeypatch):
     assert updater.erstelle_verknuepfungen(tmp_path, b) is False and b.liste == []
     monkeypatch.setattr(updater.sys, "platform", "win32")
     assert updater.erstelle_verknuepfungen(tmp_path, b) is True and len(b.liste) == 1
+
+
+def _installiert(tmp_path, markierung="alt"):
+    wende_an(tmp_path, lade_konfig_standard(), Stand(SHA, "x"), lambda url, timeout: APP_ZIP, Befehle(), "py")
+    (tmp_path / "app" / "markierung.txt").write_text(markierung)
+    venv_python(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    venv_python(tmp_path).write_text("")
+
+
+NEUES_ZIP = zip_mit({"FocusGuard/pyproject.toml": b"[project]\nname='focusguard'\ndependencies=['neu']\n",
+                     "FocusGuard/focusguard/__init__.py": b"", "FocusGuard/updater.py": b"# v2\n"})
+
+
+def test_pip_fehler_rollt_auf_alte_version_zurueck(tmp_path):
+    _installiert(tmp_path)
+    with pytest.raises(UpdateFehler, match="bisherigen Version"):
+        wende_an(tmp_path, lade_konfig_standard(), Stand("b" * 40, "y"), lambda url, timeout: NEUES_ZIP,
+                 Befehle("pip"), "py")
+    assert (tmp_path / "app" / "markierung.txt").read_text() == "alt"
+    assert lade_version(tmp_path)["sha"] == SHA and not (tmp_path / "app.alt").exists()
+
+
+def test_kaputte_neue_version_rollt_zurueck(tmp_path):
+    _installiert(tmp_path)
+    with pytest.raises(UpdateFehler):
+        wende_an(tmp_path, lade_konfig_standard(), Stand("b" * 40, "y"), lambda url, timeout: APP_ZIP,
+                 Befehle("--importtest"), "py")
+    assert (tmp_path / "app" / "markierung.txt").read_text() == "alt"
+
+
+def test_installieren_erzwingt_pip(tmp_path):
+    _installiert(tmp_path)
+    b = Befehle()
+    wende_an(tmp_path, lade_konfig_standard(), Stand(SHA, "x"), lambda url, timeout: APP_ZIP, b, "py",
+             pip_erzwingen=True)
+    assert any("pip" in " ".join(c) for c in b.liste)
+
+
+def test_umbenennen_versucht_es_mehrmals(tmp_path, monkeypatch):
+    (tmp_path / "a").mkdir()
+    echtes = updater.Path.rename
+    zaehler = {"n": 0}
+
+    def wackelig(self, ziel):
+        zaehler["n"] += 1
+        if zaehler["n"] < 3:
+            raise PermissionError("WinError 5")
+        return echtes(self, ziel)
+
+    monkeypatch.setattr(updater.Path, "rename", wackelig)
+    monkeypatch.setattr(updater.time, "sleep", lambda s: None)
+    updater._umbenennen(tmp_path / "a", tmp_path / "b")
+    assert (tmp_path / "b").exists() and zaehler["n"] == 3
+
+
+def test_branch_weg_gibt_klare_meldung():
+    import urllib.error
+
+    def weg(url, timeout):
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+
+    with pytest.raises(UpdateFehler, match="update.json"):
+        neuester_stand(lade_konfig_standard(), weg)
+
+
+def test_starten_startet_auch_nach_unerwartetem_fehler(tmp_path, monkeypatch):
+    (tmp_path / "app").mkdir()
+    gestartet = []
+
+    def kaputt(*a, **k):
+        raise PermissionError("WinError 32")
+
+    monkeypatch.setattr(updater, "pruefe_und_aktualisiere", kaputt)
+    monkeypatch.setattr(updater, "windows_prozesse", lambda: [])
+    monkeypatch.setattr(updater, "starte_app", lambda root: gestartet.append(root))
+    monkeypatch.setattr(updater, "warte_auf_start", lambda proz, root: True)
+    monkeypatch.setattr(updater.time, "sleep", lambda s: None)
+    assert updater.main(["--starten", "--ziel", str(tmp_path)]) == 0 and gestartet == [tmp_path]
+
+
+def test_absturz_beim_start_wird_gezeigt(tmp_path, monkeypatch, capsys):
+    daten = tmp_path / "daten"
+    monkeypatch.setenv("FOCUSGUARD_HOME", str(daten))
+    vpy = venv_python(tmp_path, fenster=True)
+    vpy.parent.mkdir(parents=True)
+    vpy.write_text("#!/bin/sh\necho 'Traceback: ImportError win32gui' >&2\nexit 3\n")
+    vpy.chmod(0o755)
+    proz = updater.starte_app(tmp_path)
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+    assert updater.warte_auf_start(proz, tmp_path) is False
+    assert "ImportError win32gui" in capsys.readouterr().out
+    assert "ImportError win32gui" in (daten / "start.log").read_text()
+
+
+def test_installieren_lehnt_store_python_ab(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(updater.sys, "executable", r"C:\Users\x\AppData\Local\Microsoft\WindowsApps\python.exe")
+    monkeypatch.setattr(updater, "neuester_stand", lambda *a, **k: pytest.fail("darf nichts laden"))
+    assert updater.installieren(tmp_path, None) == 1
+    assert "Microsoft Store" in capsys.readouterr().out

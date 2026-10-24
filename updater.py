@@ -26,6 +26,8 @@ import shutil
 import subprocess
 import sys
 import time
+import traceback
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -38,6 +40,9 @@ UNTERORDNER = "FocusGuard"
 PRUEF_TIMEOUT_S = 8
 DOWNLOAD_TIMEOUT_S = 60
 USER_AGENT = "FocusGuard-Updater"
+UMBENENNEN_VERSUCHE = 10          # Virenscanner und Suchindex halten frische Dateien oft kurz fest
+UMBENENNEN_PAUSE_S = 0.5
+START_PRUEFEN_S = 4               # so lange wird nach dem Start auf einen sofortigen Absturz geachtet
 
 
 class UpdateFehler(Exception):
@@ -62,6 +67,17 @@ class Stand:
 def standard_wurzel() -> Path:
     basis = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
     return Path(basis) / "Programs" / "FocusGuard"
+
+
+def datenordner() -> Path:
+    if os.environ.get("FOCUSGUARD_HOME"):
+        ordner = Path(os.environ["FOCUSGUARD_HOME"])
+    elif sys.platform == "win32" and os.environ.get("APPDATA"):
+        ordner = Path(os.environ["APPDATA"]) / "FocusGuard"
+    else:
+        ordner = Path.home() / ".focusguard"
+    ordner.mkdir(parents=True, exist_ok=True)
+    return ordner
 
 
 def wurzel_aus(skript: Path) -> Path:
@@ -143,7 +159,13 @@ def hole_bytes(url: str, timeout: float) -> bytes:
 def neuester_stand(k: Konfig, holen=None, timeout: float = PRUEF_TIMEOUT_S) -> Stand:
     holen = holen or hole_json
     url = f"https://api.github.com/repos/{k.repo}/commits/{urllib.parse.quote(k.branch, safe='')}"
-    daten = holen(url, timeout)
+    try:
+        daten = holen(url, timeout)
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 422):
+            raise UpdateFehler(f"Den Branch „{k.branch}“ gibt es auf GitHub nicht (mehr). Bitte in update.json "
+                               "einen anderen Branch eintragen, z. B. \"master\".") from e
+        raise
     sha = daten.get("sha") if isinstance(daten, dict) else None
     if not isinstance(sha, str) or len(sha) != 40:
         raise UpdateFehler("GitHub hat keinen gültigen Stand geliefert")
@@ -177,32 +199,51 @@ def entpacke_unterordner(daten: bytes, unterordner: str, ziel: Path) -> None:
         raise UpdateFehler(f"Im Archiv fehlt der Ordner {unterordner} mit pyproject.toml")
 
 
+def _umbenennen(von: Path, nach: Path) -> None:
+    for versuch in range(UMBENENNEN_VERSUCHE):
+        try:
+            von.rename(nach)
+            return
+        except OSError:
+            if versuch == UMBENENNEN_VERSUCHE - 1:
+                raise
+            time.sleep(UMBENENNEN_PAUSE_S)
+
+
 def tausche_ein(root: Path) -> None:
-    """Ersetzt app\\ durch app.neu\\. Schlägt das fehl, bleibt die alte Version unverändert."""
+    """Ersetzt app\\ durch app.neu\\; die alte Version bleibt als app.alt\\ liegen, bis das Update geklappt hat."""
     neu, app, alt = root / "app.neu", root / "app", root / "app.alt"
     for rest in root.glob("app.alt*"):
         _entferne(rest)
     if alt.exists():
-        alt.rename(root / f"app.alt-{int(time.time())}")
+        _umbenennen(alt, root / f"app.alt-{int(time.time())}")
     if app.exists():
         try:
-            app.rename(alt)
+            _umbenennen(app, alt)
         except OSError as e:
             raise UpdateFehler("Die FocusGuard-Dateien sind noch in Benutzung. Bitte FocusGuard beenden "
                                "und das Update erneut starten.") from e
     try:
-        neu.rename(app)
+        _umbenennen(neu, app)
     except OSError as e:
         if alt.exists() and not app.exists():
-            alt.rename(app)
+            _umbenennen(alt, app)
         raise UpdateFehler(f"Die neue Version konnte nicht eingespielt werden: {e}") from e
-    _entferne(alt)
 
 
-def fuehre_aus(befehl: list) -> None:
+def _zurueckrollen(root: Path) -> None:
+    app, alt = root / "app", root / "app.alt"
+    if app.exists():
+        shutil.rmtree(app, ignore_errors=True)
+        if app.exists():
+            _umbenennen(app, root / f"app.kaputt-{int(time.time())}")
+    _umbenennen(alt, app)
+
+
+def fuehre_aus(befehl: list, cwd: Path | None = None) -> None:
     befehl = [str(t) for t in befehl]
     try:
-        subprocess.run(befehl, check=True)
+        subprocess.run(befehl, check=True, cwd=str(cwd) if cwd else None)
     except FileNotFoundError as e:
         raise UpdateFehler(f"{Path(befehl[0]).name} wurde nicht gefunden") from e
     except subprocess.CalledProcessError as e:
@@ -222,8 +263,11 @@ def _kopiere_updater(root: Path) -> None:
         pass   # die alte Kopie funktioniert weiter; beim nächsten Update erneut versuchen
 
 
-def wende_an(root: Path, k: Konfig, stand: Stand, holen_bytes, ausfuehren, python_fuer_venv: str) -> bool:
-    """Lädt den Stand herunter und spielt ihn ein. Gibt zurück, ob pip laufen musste."""
+def wende_an(root: Path, k: Konfig, stand: Stand, holen_bytes, ausfuehren, python_fuer_venv: str,
+             pip_erzwingen: bool = False) -> bool:
+    """Lädt den Stand herunter und spielt ihn ein. Gibt zurück, ob pip laufen musste.
+
+    Scheitern pip oder der Importtest, kommt die bisherige Version zurück (sofern es eine gab)."""
     root.mkdir(parents=True, exist_ok=True)
     neu = root / "app.neu"
     try:
@@ -239,12 +283,24 @@ def wende_an(root: Path, k: Konfig, stand: Stand, holen_bytes, ausfuehren, pytho
     alter_hash = lade_version(root).get("pyproject")
     tausche_ein(root)
 
-    venv_fehlt = not venv_python(root).exists()
-    if venv_fehlt:
-        ausfuehren([python_fuer_venv, "-m", "venv", str(root / ".venv")])
-    pip_noetig = venv_fehlt or neuer_hash != alter_hash
-    if pip_noetig:
-        ausfuehren([str(venv_python(root)), "-m", "pip", "install", "-e", str(root / "app")])
+    try:
+        venv_fehlt = not venv_python(root).exists()
+        if venv_fehlt:
+            ausfuehren([python_fuer_venv, "-m", "venv", str(root / ".venv")])
+        pip_noetig = pip_erzwingen or venv_fehlt or neuer_hash != alter_hash
+        if pip_noetig:
+            ausfuehren([str(venv_python(root)), "-m", "pip", "install", "-e", str(root / "app")])
+        ausfuehren([str(venv_python(root)), "-m", "focusguard", "--importtest"])
+    except Exception as e:
+        if not (root / "app.alt").exists():
+            raise e if isinstance(e, UpdateFehler) else UpdateFehler(str(e))
+        try:
+            _zurueckrollen(root)
+        except OSError as rollback_fehler:
+            raise UpdateFehler(f"{e} – und die bisherige Version ließ sich nicht wiederherstellen "
+                               f"({rollback_fehler}). Bitte den Installer erneut ausführen.") from e
+        raise UpdateFehler(f"{e} – FocusGuard bleibt auf der bisherigen Version.") from e
+    _entferne(root / "app.alt")
     _kopiere_updater(root)
     _speichere_version(root, stand, neuer_hash)   # erst ganz am Ende: ein Fehler davor wird beim nächsten Mal wiederholt
     return pip_noetig
@@ -273,12 +329,13 @@ def pruefe_und_aktualisiere(root: Path, holen_json, holen_bytes, ausfuehren, pyt
 def windows_prozesse() -> list[tuple[str, str]]:
     if sys.platform != "win32":
         return []
-    skript = ("Get-CimInstance Win32_Process -Filter \"Name='pythonw.exe'\" | "
+    skript = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
+              "Get-CimInstance Win32_Process -Filter \"Name='pythonw.exe'\" | "
               "ForEach-Object { $_.Name + '|' + $_.CommandLine }")
     try:
         ausgabe = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", skript],
-                                 capture_output=True, text=True, timeout=30,
-                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout or ""
     except (OSError, subprocess.SubprocessError):
         return []
     return [tuple(zeile.split("|", 1)) for zeile in ausgabe.splitlines() if "|" in zeile]
@@ -345,18 +402,48 @@ def setze_api_schluessel(wert: str) -> None:
             raise UpdateFehler("Der API-Schlüssel konnte nicht gespeichert werden") from e
 
 
-def starte_app(root: Path) -> None:
+def starte_app(root: Path) -> subprocess.Popen:
+    """Startet FocusGuard ohne Konsole; Ausgaben und Fehler landen in %APPDATA%\\FocusGuard\\start.log."""
     pythonw = venv_python(root, fenster=True)
     flags = 0
     if sys.platform == "win32":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen([str(pythonw), "-m", "focusguard"], cwd=str(root), creationflags=flags, close_fds=True,
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    with open(datenordner() / "start.log", "w", encoding="utf-8") as log:
+        return subprocess.Popen([str(pythonw), "-m", "focusguard"], cwd=str(root), creationflags=flags,
+                                close_fds=True, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+
+
+def warte_auf_start(proz, root: Path, sekunden: float = START_PRUEFEN_S) -> bool:
+    """False, wenn FocusGuard sofort wieder beendet wurde; dann wird der Grund aus start.log gezeigt."""
+    if proz is None:
+        return True
+    ende = time.monotonic() + sekunden
+    while time.monotonic() < ende:
+        if proz.poll() is not None:
+            break
+        time.sleep(0.25)
+    code = proz.poll()
+    if code is None or code == 0:
+        return True
+    log = datenordner() / "start.log"
+    try:
+        zeilen = log.read_text(encoding="utf-8", errors="replace").splitlines()[-25:]
+    except OSError:
+        zeilen = []
+    print(f"\nFocusGuard wurde beim Start sofort wieder beendet (Code {code}). Letzte Zeilen aus start.log:\n")
+    print("\n".join(zeilen) or "(leer)")
+    print(f"\nDie ganze Datei liegt hier: {log}\nBitte schick mir diese Zeilen als Feedback.")
+    input("\nEnter zum Schließen …")
+    return False
 
 
 # --- Abläufe ---------------------------------------------------------------------------------------
 
 def installieren(root: Path, branch: str | None) -> int:
+    if "windowsapps" in sys.executable.lower():
+        print("Dieses Python stammt aus dem Microsoft Store. Damit funktionieren die Verknüpfungen nicht zuverlässig.\n"
+              "Bitte Python von https://www.python.org/downloads/ installieren und den Installer erneut starten.")
+        return 1
     print(f"FocusGuard wird installiert nach: {root}\n")
     if laeuft():
         print("FocusGuard läuft gerade. Bitte über das Tray-Symbol → „Beenden“ schließen und den Installer erneut "
@@ -368,7 +455,7 @@ def installieren(root: Path, branch: str | None) -> int:
         stand = neuester_stand(k)
         print(f"Lade Version {stand.sha[:7]}: {stand.nachricht}")
         print("Beim ersten Mal werden alle Pakete installiert, das dauert einige Minuten …\n")
-        wende_an(root, k, stand, hole_bytes, fuehre_aus, sys.executable)
+        wende_an(root, k, stand, hole_bytes, lambda b: fuehre_aus(b, cwd=root), sys.executable, pip_erzwingen=True)
     except Exception as e:
         print(f"\nInstallation fehlgeschlagen: {e}")
         return 1
@@ -387,15 +474,19 @@ def installieren(root: Path, branch: str | None) -> int:
 
     print("\nPrüfe die Installation und lade die Bild-Modelle …\n")
     try:
-        fuehre_aus([venv_python(root), "-m", "focusguard", "--pruefen"])
+        fuehre_aus([venv_python(root), "-m", "focusguard", "--pruefen"], cwd=root)
     except UpdateFehler:
         print("(Die mit [FEHLT] markierten Punkte kannst du später beheben.)")
     try:
-        if erstelle_verknuepfungen(root):
-            print("\nVerknüpfungen „FocusGuard“ und „FocusGuard aktualisieren“ liegen auf dem Desktop und im Startmenü.")
+        verknuepft = erstelle_verknuepfungen(root)
     except UpdateFehler as e:
         print(f"\nVerknüpfungen konnten nicht angelegt werden: {e}")
-    print("\nFertig! Starte FocusGuard über die Verknüpfung „FocusGuard“ auf dem Desktop.")
+        verknuepft = False
+    if verknuepft:
+        print("\nVerknüpfungen „FocusGuard“ und „FocusGuard aktualisieren“ liegen auf dem Desktop und im Startmenü.")
+        print("\nFertig! Starte FocusGuard über die Verknüpfung „FocusGuard“ auf dem Desktop.")
+    else:
+        print(f"\nFertig! Starten mit:\n  \"{venv_python(root)}\" \"{root / 'updater.py'}\" --starten")
     return 0
 
 
@@ -406,9 +497,10 @@ def starten(root: Path) -> int:
         return 0
     print("Suche nach Updates …")
     try:
-        if pruefe_und_aktualisiere(root, hole_json, hole_bytes, fuehre_aus, sys.executable) == "aktuell":
+        if pruefe_und_aktualisiere(root, hole_json, hole_bytes, lambda b: fuehre_aus(b, cwd=root),
+                                   sys.executable) == "aktuell":
             print("FocusGuard ist aktuell.")
-    except UpdateFehler as e:
+    except Exception as e:
         print(f"Update fehlgeschlagen: {e}\nFocusGuard startet mit der bisherigen Version.")
         time.sleep(8)
     if not (root / "app").exists():
@@ -416,9 +508,7 @@ def starten(root: Path) -> int:
         time.sleep(8)
         return 1
     print("Starte FocusGuard …")
-    starte_app(root)
-    time.sleep(1)
-    return 0
+    return 0 if warte_auf_start(starte_app(root), root) else 1
 
 
 def aktualisieren(root: Path) -> int:
@@ -428,8 +518,9 @@ def aktualisieren(root: Path) -> int:
         while laeuft():
             time.sleep(2)
     try:
-        ergebnis = pruefe_und_aktualisiere(root, hole_json, hole_bytes, fuehre_aus, sys.executable)
-    except UpdateFehler as e:
+        ergebnis = pruefe_und_aktualisiere(root, hole_json, hole_bytes, lambda b: fuehre_aus(b, cwd=root),
+                                           sys.executable)
+    except Exception as e:
         print(f"Update fehlgeschlagen: {e}")
         input("\nEnter zum Schließen …")
         return 1
@@ -438,7 +529,7 @@ def aktualisieren(root: Path) -> int:
     elif ergebnis == "offline":
         print("Keine Verbindung zu GitHub – bitte später erneut versuchen.")
     if input("\nFocusGuard jetzt starten? [J/n] ").strip().lower() not in ("n", "nein"):
-        starte_app(root)
+        return 0 if warte_auf_start(starte_app(root), root) else 1
     return 0
 
 
@@ -464,6 +555,15 @@ def main(argv: list[str] | None = None) -> int:
         return starten(root) if args.starten else aktualisieren(root)
     except KeyboardInterrupt:
         print("\nAbgebrochen.")
+        return 1
+    except Exception:
+        print("\nUnerwarteter Fehler:\n")
+        traceback.print_exc(file=sys.stdout)
+        print("\nBitte schick mir diese Meldung als Feedback.")
+        try:
+            input("\nEnter zum Schließen …")
+        except EOFError:
+            pass
         return 1
 
 

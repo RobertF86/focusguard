@@ -11,6 +11,7 @@ def test_pruefen_meldet_fehlenden_schluessel(tmp_path):
                        timeout=120)
     assert "[FEHLT] ANTHROPIC_API_KEY gesetzt" in r.stdout and "[OK] Python >= 3.12" in r.stdout
     assert "[OK] Modelle vorhanden" in r.stdout and r.returncode == 1
+    assert "[OK] FocusGuard-Module" in r.stdout
 
 
 def test_einstellungen_unter_windows_mit_notepad(tmp_path):
@@ -30,3 +31,9 @@ def test_version_text(tmp_path):
     assert version_text(datei) == "Entwicklungsstand"
     datei.write_text(json.dumps({"sha": "abc1234def" + "0" * 30, "nachricht": "Neue Funktion"}))
     assert version_text(datei) == "abc1234 – Neue Funktion"
+
+
+def test_importtest_laedt_alle_module():
+    r = subprocess.run([sys.executable, "-m", "focusguard", "--importtest"], capture_output=True, text=True,
+                       env={"PATH": "", "QT_QPA_PLATFORM": "offscreen"}, timeout=120)
+    assert r.returncode == 0, r.stderr
