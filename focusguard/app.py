@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
 import os
 import platform
 import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 from .config import Einstellungen, EinstellungsFehler, datenordner, lade_einstellungen, setze_sensor
 from .models import aufgabe_key
@@ -32,6 +34,17 @@ def main(argv: list[str] | None = None) -> int:
 
 # --- Selbsttest ------------------------------------------------------------------------------------
 
+def version_text(datei: Path | None = None) -> str:
+    """Installierter Stand laut version.json des Updaters (liegt neben dem Ordner app)."""
+    datei = datei or Path(__file__).resolve().parents[2] / "version.json"
+    try:
+        v = json.loads(datei.read_text(encoding="utf-8"))
+        text = f"{v['sha'][:7]} – {v.get('nachricht', '')}"
+    except (OSError, ValueError, KeyError, TypeError):
+        return "Entwicklungsstand"
+    return text.rstrip(" –")
+
+
 def _zeile(ok: bool, name: str, grund: str = "") -> bool:
     print(f"[OK] {name}" if ok else f"[FEHLT] {name}: {grund}", flush=True)
     return ok
@@ -40,6 +53,7 @@ def _zeile(ok: bool, name: str, grund: str = "") -> bool:
 def pruefen() -> int:
     from .sensors.modelle import GESICHT_MODELL, OBJEKT_MODELL, ModellFehler, stelle_modell_bereit
 
+    print(f"FocusGuard-Version: {version_text()}", flush=True)
     alles_ok = _zeile(sys.version_info >= (3, 12), "Python >= 3.12", f"gefunden: {platform.python_version()}")
     pakete = ["PySide6", "mediapipe", "cv2", "mss", "anthropic"]
     if sys.platform == "win32":

@@ -21,3 +21,12 @@ def test_einstellungen_unter_windows_mit_notepad(tmp_path):
     assert aufrufe == [["notepad.exe", str(pfad)]] and urls == []
     oeffne_einstellungen(pfad, "linux", starte=aufrufe.append, oeffne_url=urls.append)
     assert urls == [pfad]
+
+
+def test_version_text(tmp_path):
+    import json
+    from focusguard.app import version_text
+    datei = tmp_path / "version.json"
+    assert version_text(datei) == "Entwicklungsstand"
+    datei.write_text(json.dumps({"sha": "abc1234def" + "0" * 30, "nachricht": "Neue Funktion"}))
+    assert version_text(datei) == "abc1234 – Neue Funktion"
