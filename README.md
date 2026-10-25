@@ -13,7 +13,7 @@ Eindeutige Fälle (Instagram, Blender …) entscheidet die App selbst. Unklare F
 Tutorial?“) beurteilt Claude Haiku 5.5. Alles ist freiwillig: Du kannst jede Sperre aufheben und die App jederzeit
 beenden.
 
-Die Hintergründe stehen in der Spec (`../docs/superpowers/specs/2026-10-21-focusguard-design.md`).
+Die Hintergründe stehen in der Spec (`docs/superpowers/specs/2026-10-21-focusguard-design.md`).
 
 ## Voraussetzungen
 
@@ -26,7 +26,7 @@ Python musst du nicht selbst installieren, das erledigt der Installer.
 ## Installation
 
 1. Die Datei **`FocusGuard-installieren.bat`** herunterladen:
-   <https://raw.githubusercontent.com/RobertF86/ScriptCollection/refs/heads/claude/serene-hamilton-sjzb16/FocusGuard/FocusGuard-installieren.bat>
+   <https://raw.githubusercontent.com/RobertF86/focusguard/refs/heads/main/FocusGuard-installieren.bat>
    (im Browser Rechtsklick → „Speichern unter …“, oder Strg+S). Warnt der Browser, die Datei könnte schädlich sein,
    auf „Behalten“ klicken.
 2. Doppelklick auf die Datei. Zeigt Windows „Der Computer wurde durch Windows geschützt“, auf
@@ -51,7 +51,7 @@ Den Installer kannst du jederzeit erneut ausführen, zum Beispiel um eine kaputt
 - **Welche Version läuft?** Steht in der ersten Zeile von `--pruefen` (siehe unten) und in
   `%LOCALAPPDATA%\Programs\FocusGuard\version.json`. Beim Feedback bitte die sieben Zeichen mit angeben.
 - **Woher kommen Updates?** Aus dem Branch, der in `%LOCALAPPDATA%\Programs\FocusGuard\update.json` steht
-  (gerade `claude/serene-hamilton-sjzb16`). Nach dem Merge dort `"branch": "master"` eintragen.
+  (normalerweise `main`).
 
 Deine Einstellungen und Daten liegen getrennt in `%APPDATA%\FocusGuard\` und bleiben bei Updates erhalten.
 

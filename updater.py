@@ -9,7 +9,7 @@ Aufbau der Installation (Standard: %LOCALAPPDATA%\\Programs\\FocusGuard):
   app\\          der Code aus dem GitHub-Archiv (wird bei jedem Update komplett ersetzt)
   .venv\\        Python-Umgebung mit allen Paketen (bleibt erhalten)
   updater.py    eine Kopie dieses Skripts; die Verknüpfungen rufen sie auf
-  update.json   woher Updates kommen (Repo, Branch, Unterordner)
+  update.json   woher Updates kommen (Repo, Branch, Unterordner; leer = ganzes Repo)
   version.json  installierter Stand (Commit, Nachricht, Hash von pyproject.toml)
 Einstellungen und Daten liegen getrennt davon in %APPDATA%\\FocusGuard und bleiben bei Updates unberührt.
 """
@@ -34,9 +34,9 @@ import zipfile
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
-REPO = "RobertF86/ScriptCollection"
-STANDARD_BRANCH = "claude/serene-hamilton-sjzb16"
-UNTERORDNER = "FocusGuard"
+REPO = "RobertF86/focusguard"
+STANDARD_BRANCH = "main"
+UNTERORDNER = ""                  # FocusGuard liegt direkt im Repo; ein Name hier entpackt nur diesen Ordner
 PRUEF_TIMEOUT_S = 8
 DOWNLOAD_TIMEOUT_S = 60
 USER_AGENT = "FocusGuard-Updater"
@@ -164,7 +164,7 @@ def neuester_stand(k: Konfig, holen=None, timeout: float = PRUEF_TIMEOUT_S) -> S
     except urllib.error.HTTPError as e:
         if e.code in (404, 422):
             raise UpdateFehler(f"Den Branch „{k.branch}“ gibt es auf GitHub nicht (mehr). Bitte in update.json "
-                               "einen anderen Branch eintragen, z. B. \"master\".") from e
+                               "einen anderen Branch eintragen, z. B. \"main\".") from e
         raise
     sha = daten.get("sha") if isinstance(daten, dict) else None
     if not isinstance(sha, str) or len(sha) != 40:
@@ -180,23 +180,25 @@ def zip_url(k: Konfig, sha: str) -> str:
 # --- Entpacken und Einspielen ----------------------------------------------------------------------
 
 def entpacke_unterordner(daten: bytes, unterordner: str, ziel: Path) -> None:
-    """Entpackt <oberster Ordner>/<unterordner>/… aus dem GitHub-Archiv nach ziel/…"""
+    """Entpackt <oberster Ordner>/<unterordner>/… aus dem GitHub-Archiv nach ziel/…; ohne Unterordner alles."""
     _entferne(ziel)
     ziel.mkdir(parents=True)
     basis = ziel.resolve()
+    vorne = 2 if unterordner else 1
     with zipfile.ZipFile(io.BytesIO(daten)) as archiv:
         for eintrag in archiv.infolist():
             teile = PurePosixPath(eintrag.filename).parts
-            if len(teile) < 3 or teile[1] != unterordner or eintrag.is_dir():
+            if len(teile) <= vorne or (unterordner and teile[1] != unterordner) or eintrag.is_dir():
                 continue
-            relativ = teile[2:]
+            relativ = teile[vorne:]
             pfad = ziel.joinpath(*relativ).resolve()
             if ".." in relativ or basis not in pfad.parents:
                 raise UpdateFehler(f"Ungültiger Pfad im Archiv: {eintrag.filename}")
             pfad.parent.mkdir(parents=True, exist_ok=True)
             pfad.write_bytes(archiv.read(eintrag))
     if not (ziel / "pyproject.toml").exists():
-        raise UpdateFehler(f"Im Archiv fehlt der Ordner {unterordner} mit pyproject.toml")
+        wo = f"der Ordner {unterordner} mit " if unterordner else ""
+        raise UpdateFehler(f"Im Archiv fehlt {wo}pyproject.toml")
 
 
 def _umbenennen(von: Path, nach: Path) -> None:

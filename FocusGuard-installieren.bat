@@ -3,8 +3,8 @@ rem FocusGuard installieren: Python pruefen, Updater laden, FocusGuard einrichte
 rem Bewusst ohne Sprungmarken und nur ASCII, damit die Datei auch mit LF-Zeilenenden laeuft.
 setlocal EnableExtensions
 title FocusGuard installieren
-set "FG_BRANCH=claude/serene-hamilton-sjzb16"
-set "FG_URL=https://raw.githubusercontent.com/RobertF86/ScriptCollection/refs/heads/%FG_BRANCH%/FocusGuard/updater.py"
+set "FG_BRANCH=main"
+set "FG_URL=https://raw.githubusercontent.com/RobertF86/focusguard/refs/heads/%FG_BRANCH%/updater.py"
 set "FG_TMP=%TEMP%\focusguard-updater.py"
 set "FG_WINGET_PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
 rem Geeignet: Python 3.12 oder neuer, 64 Bit, nicht aus dem Microsoft Store.

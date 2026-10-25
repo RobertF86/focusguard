@@ -12,7 +12,7 @@ from updater import (Konfig, Stand, UpdateFehler, entpacke_unterordner, lade_kon
 SHA = "a" * 40
 
 
-def zip_mit(dateien: dict[str, bytes], oben="ScriptCollection-" + SHA) -> bytes:
+def zip_mit(dateien: dict[str, bytes], oben="focusguard-" + SHA) -> bytes:
     puffer = io.BytesIO()
     with zipfile.ZipFile(puffer, "w") as z:
         z.writestr(oben + "/", b"")
@@ -21,11 +21,14 @@ def zip_mit(dateien: dict[str, bytes], oben="ScriptCollection-" + SHA) -> bytes:
     return puffer.getvalue()
 
 
-APP_ZIP = zip_mit({"FocusGuard/pyproject.toml": b"[project]\nname='focusguard'\n",
-                   "FocusGuard/focusguard/__init__.py": b"",
-                   "FocusGuard/updater.py": b"# neuer updater\n",
-                   "FocusGuard/README.md": b"neu",
-                   "MaxScripts/anderes.ms": b"gehoert nicht dazu"})
+APP_ZIP = zip_mit({"pyproject.toml": b"[project]\nname='focusguard'\n",
+                   "focusguard/__init__.py": b"",
+                   "updater.py": b"# neuer updater\n",
+                   "README.md": b"neu"})
+
+UNTERORDNER_ZIP = zip_mit({"FocusGuard/pyproject.toml": b"[project]\nname='focusguard'\n",
+                           "FocusGuard/focusguard/__init__.py": b"",
+                           "MaxScripts/anderes.ms": b"gehoert nicht dazu"}, oben="ScriptCollection-" + SHA)
 
 
 class Befehle:
@@ -44,11 +47,11 @@ def api_antwort(sha=SHA, nachricht="Neue Funktion\n\nDetails"):
 
 def test_konfig_standard_und_speichern(tmp_path):
     k = lade_konfig(tmp_path)
-    assert (k.repo, k.branch, k.unterordner) == ("RobertF86/ScriptCollection", "claude/serene-hamilton-sjzb16", "FocusGuard")
-    speichere_konfig(tmp_path, Konfig(k.repo, "master", k.unterordner))
-    assert lade_konfig(tmp_path).branch == "master"
+    assert (k.repo, k.branch, k.unterordner) == ("RobertF86/focusguard", "main", "")
+    speichere_konfig(tmp_path, Konfig(k.repo, "test", k.unterordner))
+    assert lade_konfig(tmp_path).branch == "test"
     (tmp_path / "update.json").write_text("kaputt")
-    assert lade_konfig(tmp_path).branch == "claude/serene-hamilton-sjzb16"
+    assert lade_konfig(tmp_path).branch == "main"
 
 
 def test_neuester_stand_kodiert_branch_und_kuerzt_nachricht():
@@ -58,32 +61,42 @@ def test_neuester_stand_kodiert_branch_und_kuerzt_nachricht():
         urls.append(url)
         return {"sha": SHA, "commit": {"message": "Erste Zeile\n\nRest"}}
 
-    s = neuester_stand(lade_konfig_standard(), holen)
+    s = neuester_stand(Konfig("RobertF86/focusguard", "feature/neu", ""), holen)
     assert s == Stand(SHA, "Erste Zeile")
-    assert urls == ["https://api.github.com/repos/RobertF86/ScriptCollection/commits/claude%2Fserene-hamilton-sjzb16"]
+    assert urls == ["https://api.github.com/repos/RobertF86/focusguard/commits/feature%2Fneu"]
 
 
 def lade_konfig_standard():
-    return Konfig("RobertF86/ScriptCollection", "claude/serene-hamilton-sjzb16", "FocusGuard")
+    return Konfig("RobertF86/focusguard", "main", "")
+
+
+def test_entpackt_ohne_unterordner_das_ganze_repo(tmp_path):
+    ziel = tmp_path / "app.neu"
+    entpacke_unterordner(APP_ZIP, "", ziel)
+    assert (ziel / "pyproject.toml").exists() and (ziel / "focusguard" / "__init__.py").exists()
+    assert (ziel / "updater.py").exists() and not (ziel / ("focusguard-" + SHA)).exists()
 
 
 def test_entpackt_nur_den_unterordner(tmp_path):
     ziel = tmp_path / "app.neu"
-    entpacke_unterordner(APP_ZIP, "FocusGuard", ziel)
+    entpacke_unterordner(UNTERORDNER_ZIP, "FocusGuard", ziel)
     assert (ziel / "pyproject.toml").exists() and (ziel / "focusguard" / "__init__.py").exists()
     assert not (ziel / "MaxScripts").exists() and not (ziel / "FocusGuard").exists()
 
 
-def test_entpacken_wehrt_pfade_ausserhalb_ab(tmp_path):
-    boese = zip_mit({"FocusGuard/pyproject.toml": b"x", "FocusGuard/../../boese.txt": b"x"})
-    with pytest.raises(UpdateFehler):
-        entpacke_unterordner(boese, "FocusGuard", tmp_path / "app.neu")
+@pytest.mark.parametrize("unterordner", ["", "FocusGuard"])
+def test_entpacken_wehrt_pfade_ausserhalb_ab(tmp_path, unterordner):
+    vorne = unterordner + "/" if unterordner else ""
+    boese = zip_mit({vorne + "pyproject.toml": b"x", vorne + "../../boese.txt": b"x"})
+    with pytest.raises(UpdateFehler, match="Ungültiger Pfad"):
+        entpacke_unterordner(boese, unterordner, tmp_path / "app.neu")
     assert not (tmp_path / "boese.txt").exists()
 
 
-def test_entpacken_ohne_projekt_ist_fehler(tmp_path):
+@pytest.mark.parametrize("unterordner", ["", "FocusGuard"])
+def test_entpacken_ohne_projekt_ist_fehler(tmp_path, unterordner):
     with pytest.raises(UpdateFehler):
-        entpacke_unterordner(zip_mit({"Anderes/x.txt": b"x"}), "FocusGuard", tmp_path / "app.neu")
+        entpacke_unterordner(zip_mit({"Anderes/x.txt": b"x"}), unterordner, tmp_path / "app.neu")
 
 
 def test_tausche_ein_ersetzt_app_und_raeumt_auf(tmp_path):
@@ -195,8 +208,8 @@ def _installiert(tmp_path, markierung="alt"):
     venv_python(tmp_path).write_text("")
 
 
-NEUES_ZIP = zip_mit({"FocusGuard/pyproject.toml": b"[project]\nname='focusguard'\ndependencies=['neu']\n",
-                     "FocusGuard/focusguard/__init__.py": b"", "FocusGuard/updater.py": b"# v2\n"})
+NEUES_ZIP = zip_mit({"pyproject.toml": b"[project]\nname='focusguard'\ndependencies=['neu']\n",
+                     "focusguard/__init__.py": b"", "updater.py": b"# v2\n"})
 
 
 def test_pip_fehler_rollt_auf_alte_version_zurueck(tmp_path):
