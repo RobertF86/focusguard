@@ -58,9 +58,12 @@ def uebernimm_api_schluessel(umgebung=None, plattform: str = sys.platform, lies_
     umgebung = os.environ if umgebung is None else umgebung
     if umgebung.get("ANTHROPIC_API_KEY") or plattform != "win32":
         return
-    wert = lies_registry()
-    if wert:
-        umgebung["ANTHROPIC_API_KEY"] = wert
+    try:
+        wert = lies_registry()
+        if wert:
+            umgebung["ANTHROPIC_API_KEY"] = wert
+    except Exception:
+        pass   # darf den Start (und damit den Import-Test des Updaters) nie verhindern
 
 
 # --- Selbsttest ------------------------------------------------------------------------------------

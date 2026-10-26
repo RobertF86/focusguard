@@ -154,7 +154,7 @@ class Entscheider:
         return None
 
     def _stichprobe_ergebnis(self, a: KiAnfrage, e: KiErgebnis, jetzt: float) -> None:
-        if a.zeit < self._sp_zurueckgesetzt:
+        if a.zeit <= self._sp_zurueckgesetzt:
             return
         if e.urteil is None:
             self._stichprobe_zuruecksetzen(jetzt, KI_FEHLER_PAUSE_S)    # KI nicht erreichbar: zu deinen Gunsten

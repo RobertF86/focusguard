@@ -48,6 +48,17 @@ def test_api_schluessel_notfalls_aus_registry():
     assert umgebung == {}
 
 
+def test_fehler_beim_schluessel_lesen_verhindert_den_start_nicht():
+    from focusguard.app import uebernimm_api_schluessel
+
+    def kaputt():
+        raise RuntimeError("Registry nicht lesbar")
+
+    umgebung = {}
+    uebernimm_api_schluessel(umgebung, "win32", kaputt)
+    assert umgebung == {}
+
+
 def test_main_uebernimmt_schluessel_vor_dem_start(monkeypatch):
     import focusguard.app as app
     aufrufe = []

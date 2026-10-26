@@ -225,6 +225,14 @@ def test_stichprobe_zuruecksetzen_beendet_ablenkung_und_wartet_normal():
     assert stichproben(e, 279) == [] and len(stichproben(e, 280)) == 1
 
 
+def test_stichprobe_aus_dem_moment_des_zuruecksetzens_wird_verworfen():
+    e = _bestaetigte_stichprobe()
+    [c] = stichproben(e, 186)
+    e.stichprobe_zuruecksetzen(186)
+    ki(e, c, Status.ABGELENKT, 187)
+    assert stichproben(e, 305) == [] and len(stichproben(e, 306)) == 1
+
+
 def test_stichprobe_von_vor_dem_zuruecksetzen_wird_verworfen():
     e = _bestaetigte_stichprobe()
     [c] = stichproben(e, 186)
