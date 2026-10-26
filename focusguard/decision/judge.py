@@ -86,7 +86,7 @@ class Entscheider:
         u = regel_urteil(b, self._listen, self._einst.listen)
         if u is not None:
             return u
-        e = self._gedaechtnis.suche(b)
+        e = self._gedaechtnis.suche(b, jetzt)
         if e is not None:
             return Urteil(e.status, quelle_fuer(e), e.begruendung, "gedaechtnis")
         return Urteil(Status.UNKLAR, quelle_seite(seiten_schluessel(b)), "Noch nicht beurteilt", "lokal")

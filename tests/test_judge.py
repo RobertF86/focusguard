@@ -153,6 +153,18 @@ def test_stichprobe_bestaetigung_laeuft_ab():
     assert e.urteil(217).status is Status.FOKUS
 
 
+def test_programm_wird_nach_15_minuten_neu_beurteilt():
+    e = ent()
+    e.pc(pc("claude.exe", titel="Claude", zeit=1))
+    [a] = e.ki_anfragen(1)
+    ki(e, a, Status.ABGELENKT, 2, gilt="programm")
+    e.pc(pc("claude.exe", titel="Claude", zeit=902))
+    assert e.urteil(902).status is Status.ABGELENKT
+    e.pc(pc("claude.exe", titel="Claude", zeit=903))
+    assert e.urteil(903).status is Status.UNKLAR
+    assert [x.quelle for x in e.ki_anfragen(903) if x.art is KiArt.SEITE] == ["seite:claude.exe|Claude"]
+
+
 def test_neutrales_fenster_laesst_vorheriges_urteil_stehen():
     e = ent()
     e.pc(pc(url="https://instagram.com", zeit=1))
