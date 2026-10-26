@@ -150,7 +150,8 @@ selbst ausprobieren:
    8 s nach dem Weglegen verschwindet.
 10. 6 Minuten weggehen → Icon blau, beim Zurückkommen eine Begrüßung.
 11. Video auf dem zweiten Monitor, Blender im Vordergrund → innerhalb von ca. 3 Minuten ein Hinweis, das Overlay
-    frühestens 30 s danach, nie eine Sperre. Ein offenes, ruhendes Fenster auf dem zweiten Monitor (Messenger, Shop)
+    etwa 30 s danach, nie eine Sperre. Bei einem Rückfall innerhalb von 5 Minuten kommt wie überall gleich das
+    Overlay. Ein offenes, ruhendes Fenster auf dem zweiten Monitor (Messenger, Shop)
     zählt dagegen nicht als Ablenkung. „Zurück zur Aufgabe“ beendet diese Ablenkung, das Overlay kommt nicht gleich
     wieder.
 12. Kamera durch ein anderes Programm belegen (z. B. Teams-Anruf) → Tooltip zeigt „Kamera nicht verfügbar“, keine
