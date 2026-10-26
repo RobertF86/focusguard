@@ -1,6 +1,6 @@
 import pytest
 
-from focusguard.decision.rules import domain_aus_url, domain_passt, programm_passt, regel_urteil
+from focusguard.decision.rules import domain_aus_url, domain_passt, ist_neutral, programm_passt, regel_urteil
 from focusguard.models import AufgabenListen, Status
 from hilfen import pc, einst
 
@@ -33,3 +33,11 @@ def test_regel_reihenfolge():
 def test_aufgaben_fokus_schlaegt_globale_ablenkung():
     u = regel_urteil(pc(url="https://instagram.com"), AufgabenListen(fokus_domains=("instagram.com",)), einst().listen)
     assert u.status is Status.FOKUS
+
+
+@pytest.mark.parametrize("prozess,titel,erwartet", [
+    ("explorer.exe", "", True), ("explorer.exe", "Task Switching", True), ("explorer.exe", "Aufgabenansicht", True),
+    ("explorer.exe", "Program Manager", True), ("explorer.exe", "Dokumente", False),
+    ("ShareX.exe", "ShareX - Image editor", True), ("searchhost.exe", "Suche", True), ("blender.exe", "", False)])
+def test_neutrale_fenster(prozess, titel, erwartet):
+    assert ist_neutral(pc(prozess, titel=titel), einst().listen.neutral_programme) is erwartet

@@ -15,6 +15,15 @@ BROWSER_PROZESSE = frozenset({"chrome.exe", "msedge.exe", "brave.exe", "firefox.
 MISCH_PLATTFORMEN = frozenset({"youtube.com", "reddit.com", "x.com", "twitter.com", "google.com", "bing.com",
                                "duckduckgo.com"})
 
+# Fenstertitel der Windows-Oberfläche selbst: Desktop, Taskleiste (ohne Titel) und Alt+Tab.
+SHELL_TITEL = frozenset({"", "program manager", "task switching", "task view", "aufgabenansicht"})
+
+
+def ist_neutral(b: PcBeobachtung, neutral_programme: Iterable[str]) -> bool:
+    if b.prozess.lower() == "explorer.exe":
+        return b.fenstertitel.strip().lower() in SHELL_TITEL      # mit Ordnertitel ist es der Datei-Explorer
+    return programm_passt(b.prozess, neutral_programme)
+
 
 def domain_aus_url(url: str | None) -> str | None:
     if not url or not url.strip():

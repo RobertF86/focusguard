@@ -4,6 +4,7 @@ und entscheidet, wann die KI gefragt wird."""
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 from ..config import Einstellungen
 from ..models import (QUELLE_HANDY, QUELLE_STICHPROBE, AufgabenListen, GedaechtnisEintrag, HandyBeobachtung,
@@ -11,7 +12,7 @@ from ..models import (QUELLE_HANDY, QUELLE_STICHPROBE, AufgabenListen, Gedaechtn
                       quelle_seite)
 from .kamera_regeln import KameraBewerter
 from .memory import Gedaechtnis, eintrag_fuer, quelle_fuer, seiten_schluessel
-from .rules import regel_urteil
+from .rules import ist_neutral, regel_urteil
 
 PC_VERALTET_S = 5.0
 KI_FEHLER_PAUSE_S = 30.0
@@ -65,6 +66,11 @@ class Entscheider:
         self.kamera.setze_aktiv(webcam, smartphone)
 
     def pc(self, b: PcBeobachtung) -> None:
+        if ist_neutral(b, self._einst.listen.neutral_programme):
+            # Desktop, Alt+Tab, Screenshot-Werkzeug …: Das Fenster davor gilt weiter und veraltet nicht.
+            if self._letzte_pc is not None:
+                self._letzte_pc = replace(self._letzte_pc, zeit=b.zeit)
+            return
         self._letzte_pc = b
 
     def webcam(self, b: WebcamBeobachtung) -> None:

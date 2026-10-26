@@ -153,6 +153,22 @@ def test_stichprobe_bestaetigung_laeuft_ab():
     assert e.urteil(217).status is Status.FOKUS
 
 
+def test_neutrales_fenster_laesst_vorheriges_urteil_stehen():
+    e = ent()
+    e.pc(pc(url="https://instagram.com", zeit=1))
+    e.pc(pc("explorer.exe", titel="Task Switching", zeit=2))
+    assert e.urteil(2).quelle == "domain:instagram.com"
+    e.pc(pc("sharex.exe", titel="ShareX - Image editor", zeit=9))
+    assert e.urteil(9).quelle == "domain:instagram.com"      # veraltet nicht, solange das neutrale Fenster vorne ist
+    assert e.ki_anfragen(9) == []
+
+
+def test_neutrales_fenster_ohne_vorheriges_urteil():
+    e = ent()
+    e.pc(pc("explorer.exe", titel="", zeit=1))
+    assert e.urteil(1).status is Status.FOKUS and e.ki_anfragen(1) == []
+
+
 def stichproben(e, t):
     return [a for a in e.ki_anfragen(t) if a.art is KiArt.STICHPROBE]
 

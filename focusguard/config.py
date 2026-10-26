@@ -51,6 +51,10 @@ class ListenEinst:
                                           "twitch.tv", "9gag.com")
     ablenkung_programme: tuple[str, ...] = ("steam.exe", "epicgameslauncher.exe")
     nie_sperren: tuple[str, ...] = ("explorer.exe", "taskmgr.exe", "python.exe", "pythonw.exe")
+    # Kurz eingeblendete System- und Werkzeugfenster: Sie ändern das Urteil nicht und lösen keine KI-Frage aus.
+    neutral_programme: tuple[str, ...] = ("searchhost.exe", "searchapp.exe", "startmenuexperiencehost.exe",
+                                          "shellexperiencehost.exe", "lockapp.exe", "sharex.exe", "snippingtool.exe",
+                                          "screenclippinghost.exe")
 
 
 @dataclass(frozen=True)
@@ -94,6 +98,9 @@ reset_nach_fokus_minuten = 5
 ablenkung_domains = ["instagram.com", "tiktok.com", "facebook.com", "netflix.com", "twitch.tv", "9gag.com"]
 ablenkung_programme = ["steam.exe", "epicgameslauncher.exe"]
 nie_sperren = ["explorer.exe", "taskmgr.exe", "python.exe", "pythonw.exe"]
+# ändern das Urteil nicht (Desktop, Alt+Tab und Explorer ohne Fenstertitel sind immer neutral)
+neutral_programme = ["searchhost.exe", "searchapp.exe", "startmenuexperiencehost.exe", "shellexperiencehost.exe",
+                     "lockapp.exe", "sharex.exe", "snippingtool.exe", "screenclippinghost.exe"]
 """
 
 

@@ -13,6 +13,13 @@ def test_fehlende_datei_wird_mit_standardwerten_angelegt(tmp_path):
     assert e.erkennung.kopf_gesenkt_grad == 20 and e.erkennung.abwesend_nach_sekunden == 15
     assert "instagram.com" in e.listen.ablenkung_domains
     assert e.listen.nie_sperren == ("explorer.exe", "taskmgr.exe", "python.exe", "pythonw.exe")
+    assert "sharex.exe" in e.listen.neutral_programme and "neutral_programme" in p.read_text(encoding="utf-8")
+
+
+def test_neutrale_programme_anpassbar(tmp_path):
+    p = tmp_path / "settings.toml"
+    p.write_text('[listen]\nneutral_programme = ["greenshot.exe"]\n')
+    assert lade_einstellungen(p).listen.neutral_programme == ("greenshot.exe",)
 
 
 def test_teilweise_datei_ergaenzt_standardwerte(tmp_path):
