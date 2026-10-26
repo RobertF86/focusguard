@@ -148,3 +148,25 @@ def test_stichprobe_bestaetigung_laeuft_ab():
     assert e.urteil(200).quelle == "stichprobe"
     e.pc(pc("blender.exe", zeit=217))
     assert e.urteil(217).status is Status.FOKUS
+
+
+def stichproben(e, t):
+    return [a for a in e.ki_anfragen(t) if a.art is KiArt.STICHPROBE]
+
+
+def test_stichprobe_zuruecksetzen_beendet_ablenkung_und_wartet_normal():
+    e = _bestaetigte_stichprobe()
+    e.stichprobe_zuruecksetzen(160)
+    e.pc(pc("blender.exe", zeit=160))
+    assert e.urteil(160).status is Status.FOKUS
+    assert stichproben(e, 279) == [] and len(stichproben(e, 280)) == 1
+
+
+def test_stichprobe_von_vor_dem_zuruecksetzen_wird_verworfen():
+    e = _bestaetigte_stichprobe()
+    [c] = stichproben(e, 186)
+    e.stichprobe_zuruecksetzen(190)
+    ki(e, c, Status.ABGELENKT, 191)
+    e.pc(pc("blender.exe", zeit=192))
+    assert e.urteil(192).status is Status.FOKUS
+    assert stichproben(e, 309) == [] and len(stichproben(e, 310)) == 1

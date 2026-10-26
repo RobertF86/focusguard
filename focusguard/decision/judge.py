@@ -50,6 +50,7 @@ class Entscheider:
         self._sp_verdacht_start: float | None = None
         self._sp_begruendung = ""
         self._sp_bestaetigt_bis = -math.inf   # ohne neue Bestätigung endet die Stichproben-Ablenkung
+        self._sp_zurueckgesetzt = -math.inf   # Ergebnisse von Anfragen vor diesem Zeitpunkt zählen nicht mehr
 
     @property
     def listen(self) -> AufgabenListen:
@@ -137,6 +138,8 @@ class Entscheider:
         return None
 
     def _stichprobe_ergebnis(self, a: KiAnfrage, e: KiErgebnis, jetzt: float) -> None:
+        if a.zeit < self._sp_zurueckgesetzt:
+            return
         if e.urteil is None:
             self._stichprobe_zuruecksetzen(jetzt, KI_FEHLER_PAUSE_S)    # KI nicht erreichbar: zu deinen Gunsten
             return
@@ -157,7 +160,13 @@ class Entscheider:
         self._sp_verdacht_start = None
         self._sp_naechste = jetzt + (self._einst.ki.stichprobe_sekunden if pause_s is None else pause_s)
 
+    def stichprobe_zuruecksetzen(self, jetzt: float) -> None:
+        """Die Person hat auf ein Overlay reagiert: Die Stichprobe fängt von vorn an."""
+        self._sp_zurueckgesetzt = jetzt
+        self._stichprobe_zuruecksetzen(jetzt)
+
     def korrektur(self, quelle: str, jetzt: float) -> tuple[AufgabenListen | None, GedaechtnisEintrag | None]:
+        self.stichprobe_zuruecksetzen(jetzt)
         if quelle.startswith("domain:"):
             self._listen = self._listen.mit_fokus_domain(quelle.removeprefix("domain:"))
             return self._listen, None
@@ -171,6 +180,4 @@ class Entscheider:
             return None, eintrag
         if quelle == QUELLE_HANDY:
             self.kamera.handy_aussetzen(jetzt + HANDY_KORREKTUR_PAUSE_S)
-        elif quelle == QUELLE_STICHPROBE:
-            self._stichprobe_zuruecksetzen(jetzt)
         return None, None

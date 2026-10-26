@@ -211,6 +211,7 @@ class Steuerung:
         if not self.aktiv:
             return
         jetzt = self._uhr()
+        self._entscheider.stichprobe_zuruecksetzen(jetzt)
         for a in self._eskalation.zurueck_zur_aufgabe(jetzt):
             self._ausfuehren(a, "", jetzt)
 
