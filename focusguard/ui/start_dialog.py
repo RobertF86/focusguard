@@ -117,7 +117,11 @@ class StartDialog(QDialog):
         if listen is None:
             return
         for name, feld in self._listen_felder.items():
-            feld.setPlainText("\n".join(getattr(listen, name)))
+            # Was schon im Feld steht (etwa während der KI-Anfrage getippt), bleibt; Vorschläge kommen dazu.
+            zeilen = [z.strip() for z in feld.toPlainText().splitlines() if z.strip()]
+            vorhanden = {z.lower() for z in zeilen}
+            zeilen += [w for w in getattr(listen, name) if w.lower() not in vorhanden]
+            feld.setPlainText("\n".join(zeilen))
 
     def _lies_liste(self, name: str) -> tuple[str, ...]:
         werte: list[str] = []

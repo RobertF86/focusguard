@@ -46,6 +46,23 @@ def test_start_dialog_mit_vorschlag(app):
     assert (aufgabe, dauer, listen.fokus_programme) == ("Blender lernen", 25, ("blender.exe",))
 
 
+def test_start_dialog_behaelt_eingaben_waehrend_ki_vorschlaegt(app):
+    from focusguard.ui.start_dialog import StartDialog
+    wartend = []
+    vorschlag = AufgabenListen(fokus_programme=("blender.exe", "claude.exe"), fokus_domains=("docs.blender.org",))
+    d = StartDialog(lambda a: None, lambda a: vorschlag, ausfuehren=wartend.append)
+    d.findChild(QtWidgets.QLineEdit, "aufgabe").setText("Blender lernen")
+    knopf(d, "Weiter").click()
+    fokus_programme = d.findChildren(QtWidgets.QPlainTextEdit)[0]
+    fokus_programme.setPlainText("Claude.exe\nnotepad.exe")       # getippt, während die KI noch rechnet
+    wartend[0]()
+    app.processEvents()
+    knopf(d, "Session starten").click()
+    listen = d.ergebnis()[2]
+    assert listen.fokus_programme == ("claude.exe", "notepad.exe", "blender.exe")
+    assert listen.fokus_domains == ("docs.blender.org",)
+
+
 def test_start_dialog_nutzt_gespeicherte_listen(app):
     from focusguard.ui.start_dialog import StartDialog
     aufrufe = []
