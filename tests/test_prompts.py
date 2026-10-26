@@ -58,6 +58,11 @@ def test_stichprobe_zaehlt_andere_monitore_nur_bei_laufenden_medien():
     assert "keine ablenkung" in regel
 
 
+def test_begruendung_ohne_namen_und_nachrichteninhalte():
+    regel = SYSTEM_URTEIL.lower()
+    assert "keine namen" in regel and "nachrichten" in regel
+
+
 def test_baue_anfrage_ohne_sampling():
     k = baue_anfrage("claude-haiku-5-5", SYSTEM_URTEIL, [{"type": "text", "text": "x"}], URTEIL_SCHEMA)
     assert set(k) == {"model", "max_tokens", "system", "messages", "output_config"}
