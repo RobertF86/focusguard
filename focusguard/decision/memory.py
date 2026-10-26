@@ -2,7 +2,7 @@
 
 Ganze Programme legen nur die Listen fest. Ein KI-Urteil über ein Programm gilt pro Fenstertitel und nur
 PROGRAMM_GUELTIG_S lang: In Programmen wie Claude oder dem Explorer bleibt der Titel gleich, der Inhalt nicht.
-Sicherheit 1.0 haben nur deine eigenen Korrekturen; sie laufen nie ab.
+Deine eigenen Korrekturen („Gehört zur Aufgabe“) laufen nie ab.
 """
 
 from __future__ import annotations
@@ -14,7 +14,11 @@ from ..models import (GedaechtnisEintrag, KiUrteil, PcBeobachtung, Status, quell
                       quelle_seite)
 
 PROGRAMM_GUELTIG_S = 15 * 60
-KI_HOECHSTE_SICHERHEIT = 0.99
+KORREKTUR_BEGRUENDUNG = "Von dir als passend markiert"
+
+
+def ist_korrektur(e: GedaechtnisEintrag) -> bool:
+    return e.status is Status.FOKUS and e.begruendung == KORREKTUR_BEGRUENDUNG
 
 
 def seiten_schluessel(b: PcBeobachtung) -> str:
@@ -28,8 +32,7 @@ def eintrag_fuer(b: PcBeobachtung, u: KiUrteil, aufgabe_key: str, zeit: float) -
         ebene, schluessel = "domain", b.domain
     else:
         ebene, schluessel = "seite", seiten_schluessel(b)
-    return GedaechtnisEintrag(aufgabe_key, ebene, schluessel, u.status, u.begruendung,
-                              min(u.sicherheit, KI_HOECHSTE_SICHERHEIT), zeit)
+    return GedaechtnisEintrag(aufgabe_key, ebene, schluessel, u.status, u.begruendung, u.sicherheit, zeit)
 
 
 def quelle_fuer(e: GedaechtnisEintrag) -> str:
@@ -51,7 +54,7 @@ class Gedaechtnis:
 
     def suche(self, b: PcBeobachtung, jetzt: float) -> GedaechtnisEintrag | None:
         seite = self._eintraege.get(("seite", seiten_schluessel(b)))
-        if seite is not None and not b.ist_browser and seite.sicherheit < 1.0 \
+        if seite is not None and not b.ist_browser and not ist_korrektur(seite) \
                 and jetzt - seite.zeit > PROGRAMM_GUELTIG_S:
             seite = None                                       # altes KI-Urteil über ein Programm: neu fragen
         if seite is not None:

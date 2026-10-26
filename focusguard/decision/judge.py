@@ -10,7 +10,7 @@ from ..models import (QUELLE_HANDY, QUELLE_STICHPROBE, AufgabenListen, Gedaechtn
                       KiAnfrage, KiArt, KiErgebnis, PcBeobachtung, Status, Urteil, WebcamBeobachtung,
                       quelle_seite)
 from .kamera_regeln import KameraBewerter
-from .memory import Gedaechtnis, eintrag_fuer, quelle_fuer, seiten_schluessel
+from .memory import KORREKTUR_BEGRUENDUNG, Gedaechtnis, eintrag_fuer, quelle_fuer, seiten_schluessel
 from .rules import ist_neutral, regel_urteil
 
 PC_VERALTET_S = 5.0
@@ -191,7 +191,7 @@ class Entscheider:
             return self._listen, None
         if quelle.startswith("seite:"):
             eintrag = GedaechtnisEintrag(self._aufgabe_key, "seite", quelle.removeprefix("seite:"), Status.FOKUS,
-                                         "Von dir als passend markiert", 1.0, jetzt)
+                                         KORREKTUR_BEGRUENDUNG, 1.0, jetzt)
             self._gedaechtnis.merke(eintrag)
             return None, eintrag
         if quelle == QUELLE_HANDY:

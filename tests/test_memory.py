@@ -1,4 +1,5 @@
-from focusguard.decision.memory import seiten_schluessel, eintrag_fuer, quelle_fuer, Gedaechtnis
+from focusguard.decision.memory import (KORREKTUR_BEGRUENDUNG, seiten_schluessel, eintrag_fuer, quelle_fuer,
+                                       Gedaechtnis)
 from focusguard.models import KiUrteil, Status, GedaechtnisEintrag
 from hilfen import pc
 
@@ -22,7 +23,6 @@ def test_ki_urteil_gilt_nie_fuer_ein_ganzes_programm():
     e = eintrag_fuer(pc("claude.exe", titel="Claude"), KiUrteil(Status.ABGELENKT, "Gitarren-App", 0.85, "programm"),
                      "k", 1.0)
     assert (e.ebene, e.schluessel) == ("seite", "claude.exe|Claude")
-    assert eintrag_fuer(YT, KiUrteil(Status.FOKUS, "sicher", 1.0, "seite"), "k", 1.0).sicherheit < 1.0
 
 
 def test_suche_ignoriert_alte_programm_eintraege():
@@ -34,7 +34,10 @@ def test_ki_urteil_ueber_programm_laeuft_nach_15_minuten_ab():
     claude = pc("claude.exe", titel="Claude")
     g = Gedaechtnis([GedaechtnisEintrag("k", "seite", "claude.exe|Claude", Status.ABGELENKT, "", 0.85, 0)])
     assert g.suche(claude, 900) is not None and g.suche(claude, 901) is None
-    korrigiert = Gedaechtnis([GedaechtnisEintrag("k", "seite", "claude.exe|Claude", Status.FOKUS, "", 1.0, 0)])
+    alt = Gedaechtnis([GedaechtnisEintrag("k", "seite", "claude.exe|Claude", Status.ABGELENKT, "Du chattest", 1.0, 0)])
+    assert alt.suche(claude, 901) is None                                 # KI-Urteil mit Sicherheit 1.0 aus alter DB
+    korrigiert = Gedaechtnis([GedaechtnisEintrag("k", "seite", "claude.exe|Claude", Status.FOKUS,
+                                                 KORREKTUR_BEGRUENDUNG, 1.0, 0)])
     assert korrigiert.suche(claude, 100_000) is not None                  # deine Korrektur läuft nie ab
     seite = Gedaechtnis([GedaechtnisEintrag("k", "seite", "youtube.com|Blender Donut", Status.FOKUS, "", 0.9, 0)])
     assert seite.suche(YT, 100_000) is not None                           # Browser-Seiten laufen nicht ab
