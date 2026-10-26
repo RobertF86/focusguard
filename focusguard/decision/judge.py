@@ -47,7 +47,7 @@ class Entscheider:
 
         self._sp_zustand = "ruhig"           # ruhig → verdacht → bestaetigt
         self._sp_naechste = start + einst.ki.stichprobe_sekunden
-        self._sp_verdacht_start: float | None = None
+        self._sp_bestaetigt_seit: float | None = None
         self._sp_begruendung = ""
         self._sp_bestaetigt_bis = -math.inf   # ohne neue Bestätigung endet die Stichproben-Ablenkung
         self._sp_zurueckgesetzt = -math.inf   # Ergebnisse von Anfragen vor diesem Zeitpunkt zählen nicht mehr
@@ -88,7 +88,7 @@ class Entscheider:
     def _stichprobe_urteil(self, jetzt: float) -> Urteil | None:
         if self._sp_zustand != "bestaetigt" or jetzt > self._sp_bestaetigt_bis:
             return None
-        return Urteil(Status.ABGELENKT, QUELLE_STICHPROBE, self._sp_begruendung, "ki", seit=self._sp_verdacht_start)
+        return Urteil(Status.ABGELENKT, QUELLE_STICHPROBE, self._sp_begruendung, "ki", seit=self._sp_bestaetigt_seit)
 
     def urteil(self, jetzt: float) -> Urteil:
         return _hoechstes([self._pc_urteil(jetzt), self.kamera.urteil(jetzt), self._stichprobe_urteil(jetzt)])
@@ -146,9 +146,9 @@ class Entscheider:
         if e.urteil.status is Status.ABGELENKT:
             if self._sp_zustand == "ruhig":
                 self._sp_zustand = "verdacht"
-                self._sp_verdacht_start = a.zeit
             elif self._sp_zustand == "verdacht":
                 self._sp_zustand = "bestaetigt"
+                self._sp_bestaetigt_seit = jetzt    # ab hier zählt die Eskalation: erst Hinweis, dann Overlay
             self._sp_begruendung = e.urteil.begruendung
             self._sp_naechste = jetzt + self._einst.ki.stichprobe_nachpruefung_sekunden
             self._sp_bestaetigt_bis = jetzt + 2 * self._einst.ki.stichprobe_nachpruefung_sekunden
@@ -157,7 +157,7 @@ class Entscheider:
 
     def _stichprobe_zuruecksetzen(self, jetzt: float, pause_s: float | None = None) -> None:
         self._sp_zustand = "ruhig"
-        self._sp_verdacht_start = None
+        self._sp_bestaetigt_seit = None
         self._sp_naechste = jetzt + (self._einst.ki.stichprobe_sekunden if pause_s is None else pause_s)
 
     def stichprobe_zuruecksetzen(self, jetzt: float) -> None:

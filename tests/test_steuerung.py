@@ -171,6 +171,12 @@ def _bestaetige_stichprobe(st, u, r, beob):
         ticks(st, u, 31, beob)
 
 
+def test_bestaetigte_stichprobe_beginnt_mit_hinweis():
+    st, u, ui, sens, bl, r = aufbau()
+    _bestaetige_stichprobe(st, u, r, lambda t: pc("blender.exe", zeit=t))
+    assert "hinweis" in ui.namen() and "overlay_zeigen" not in ui.namen()
+
+
 def test_zurueck_zur_aufgabe_beendet_stichproben_ablenkung():
     st, u, ui, sens, bl, r = aufbau()
     blender = lambda t: pc("blender.exe", zeit=t)

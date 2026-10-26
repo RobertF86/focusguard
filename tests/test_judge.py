@@ -92,7 +92,10 @@ def test_stichprobe_alle_120_s_mit_bestaetigung():
     [b] = e.ki_anfragen(155)
     ki(e, b, Status.ABGELENKT, 156)
     u = e.urteil(156)
-    assert (u.status, u.quelle, u.seit) == (Status.ABGELENKT, "stichprobe", 120)
+    assert (u.status, u.quelle, u.seit) == (Status.ABGELENKT, "stichprobe", 156)   # zählt ab der Bestätigung
+    [c] = stichproben(e, 186)
+    ki(e, c, Status.ABGELENKT, 187)
+    assert e.urteil(187).seit == 156
 
 
 def test_stichprobe_nachpruefung_negativ():
