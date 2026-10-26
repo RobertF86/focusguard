@@ -155,7 +155,7 @@ selbst ausprobieren:
 
 ## Entwicklung
 
-Ohne Installer, direkt aus einem Checkout im Ordner `FocusGuard`:
+Ohne Installer, direkt aus einem Checkout dieses Repos:
 
 ```bat
 py -3.12 -m venv .venv

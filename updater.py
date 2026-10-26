@@ -163,8 +163,9 @@ def neuester_stand(k: Konfig, holen=None, timeout: float = PRUEF_TIMEOUT_S) -> S
         daten = holen(url, timeout)
     except urllib.error.HTTPError as e:
         if e.code in (404, 422):
-            raise UpdateFehler(f"Den Branch „{k.branch}“ gibt es auf GitHub nicht (mehr). Bitte in update.json "
-                               "einen anderen Branch eintragen, z. B. \"main\".") from e
+            raise UpdateFehler(f"Auf GitHub gibt es das Repo „{k.repo}“ oder darin den Branch „{k.branch}“ nicht "
+                               f"(mehr). Bitte update.json prüfen, normal ist \"repo\": \"{REPO}\" und "
+                               f"\"branch\": \"{STANDARD_BRANCH}\".") from e
         raise
     sha = daten.get("sha") if isinstance(daten, dict) else None
     if not isinstance(sha, str) or len(sha) != 40:
