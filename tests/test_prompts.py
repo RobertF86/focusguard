@@ -50,6 +50,14 @@ def test_stichprobe_inhalt():
     assert all(s in inhalt[-1]["text"] for s in ("Monitor 1", "Monitor 2", "Webcam"))
 
 
+def test_stichprobe_zaehlt_andere_monitore_nur_bei_laufenden_medien():
+    text = stichprobe_inhalt("a", pc("blender.exe", titel="Blender"), [b"m1", b"m2"], None)[-1]["text"]
+    assert "blender.exe" in text
+    regel = text.lower()
+    assert "aktiven fenster" in regel and "andere monitore" in regel and "video" in regel
+    assert "keine ablenkung" in regel
+
+
 def test_baue_anfrage_ohne_sampling():
     k = baue_anfrage("claude-haiku-5-5", SYSTEM_URTEIL, [{"type": "text", "text": "x"}], URTEIL_SCHEMA)
     assert set(k) == {"model", "max_tokens", "system", "messages", "output_config"}
