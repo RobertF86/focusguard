@@ -23,6 +23,7 @@ class Eskalation:
         self._letztes_ende: float | None = None
         self._fokus_seit: float | None = start
         self._overlay_offen = False
+        self._overlay_gezeigt = False          # im laufenden Ablenkungs-Lauf schon ein Overlay gezeigt
         self._overlay_pause_bis = -math.inf
         self._gesperrt_im_lauf: set[str] = set()
         self._handy_overlay = False
@@ -68,6 +69,7 @@ class Eskalation:
             self._stufe = 0
             self._gesperrt_im_lauf = set()
             self._handy_overlay = False
+            self._overlay_gezeigt = False
 
         dauer = jetzt - self._lauf_start
         ziel = 0
@@ -93,18 +95,20 @@ class Eskalation:
 
         if self._stufe >= 2 and not self._overlay_offen and jetzt >= self._overlay_pause_bis:
             self._overlay_offen = True
-            aktionen.append(HandyOverlay() if self._handy_overlay else OverlayZeigen(u.begruendung, u.quelle))
+            erneut, self._overlay_gezeigt = self._overlay_gezeigt, True
+            aktionen.append(HandyOverlay(erneut) if self._handy_overlay
+                            else OverlayZeigen(u.begruendung, u.quelle, erneut))
         return aktionen
 
     def _stufen_aktion(self, stufe: int, u: Urteil) -> list[Aktion]:
         if stufe == 1:
             return [Hinweis(u.begruendung)]
         if stufe == 2:
-            self._overlay_offen = True
+            self._overlay_offen = self._overlay_gezeigt = True
             return [OverlayZeigen(u.begruendung, u.quelle)]
         if u.quelle == QUELLE_HANDY:
             self._handy_overlay = True
-            self._overlay_offen = True
+            self._overlay_offen = self._overlay_gezeigt = True
             return [HandyOverlay()]
         self._gesperrt_im_lauf.add(u.quelle)
         return [Sperren(u.quelle)]

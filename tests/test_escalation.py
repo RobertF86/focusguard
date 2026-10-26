@@ -82,6 +82,17 @@ def test_zurueck_zur_aufgabe():
     assert typen(lauf(es, ABG(), 46, 50)) == [(50, "OverlayZeigen")]
 
 
+def test_erneutes_overlay_ist_markiert():
+    es = esk()
+    assert (40, OverlayZeigen("Instagram", "domain:instagram.com")) in lauf(es, ABG(), 0, 45)
+    es.zurueck_zur_aufgabe(45)
+    assert (50, OverlayZeigen("Instagram", "domain:instagram.com", erneut=True)) in lauf(es, ABG(), 46, 50)
+    handy = esk()
+    assert (70, HandyOverlay()) in lauf(handy, ABG("handy"), 0, 72)
+    handy.zurueck_zur_aufgabe(72)
+    assert (77, HandyOverlay(erneut=True)) in lauf(handy, ABG("handy"), 73, 77)
+
+
 def test_korrektur_ohne_rueckfall():
     es = esk()
     lauf(es, ABG(), 0, 45)

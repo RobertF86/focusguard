@@ -137,6 +137,7 @@ class Hinweis:
 class OverlayZeigen:
     text: str
     quelle: str
+    erneut: bool = False        # im selben Lauf schon einmal gezeigt, also keine neue Stufe
 
 
 @dataclass(frozen=True)
@@ -151,7 +152,7 @@ class Sperren:
 
 @dataclass(frozen=True)
 class HandyOverlay:
-    pass
+    erneut: bool = False
 
 
 @dataclass(frozen=True)

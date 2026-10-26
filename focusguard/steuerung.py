@@ -304,6 +304,12 @@ class Steuerung:
                      jetzt)
         return int(a.sekunden[Status.FOKUS] // 60)
 
+    def _overlay_ereignis(self, erneut: bool, quelle: str, stufe: int, jetzt: float) -> None:
+        if erneut:   # dasselbe Overlay nach „Zurück zur Aufgabe“ noch einmal: keine neue Stufe für die Auswertung
+            self._ereignis("overlay_erneut", quelle, Status.ABGELENKT.value, zeit=jetzt)
+        else:
+            self._ereignis("eskalation", quelle, Status.ABGELENKT.value, {"stufe": stufe}, zeit=jetzt)
+
     def _ausfuehren(self, aktion, quelle: str, jetzt: float) -> None:
         aufgabe = self._session.aufgabe
         if isinstance(aktion, Hinweis):
@@ -313,7 +319,7 @@ class Steuerung:
             text = f"{aktion.text}\nFokuszeit bisher: {self._fokus_minuten(jetzt)} min"
             self._ui.overlay_zeigen(f"Zurück zu: {aufgabe}", text, aktion.quelle)
             self._bildschirm_pause(True)
-            self._ereignis("eskalation", aktion.quelle, Status.ABGELENKT.value, {"stufe": 2}, zeit=jetzt)
+            self._overlay_ereignis(aktion.erneut, aktion.quelle, 2, jetzt)
         elif isinstance(aktion, Sperren):
             self._gesperrt.add(aktion.quelle)
             self._ereignis("eskalation", aktion.quelle, Status.ABGELENKT.value, {"stufe": 3}, zeit=jetzt)
@@ -321,7 +327,7 @@ class Steuerung:
         elif isinstance(aktion, HandyOverlay):
             self._ui.overlay_zeigen("Leg das Handy weg", f"Zurück zu: {aufgabe}", "handy")
             self._bildschirm_pause(True)
-            self._ereignis("eskalation", "handy", Status.ABGELENKT.value, {"stufe": 3}, zeit=jetzt)
+            self._overlay_ereignis(aktion.erneut, "handy", 3, jetzt)
         elif isinstance(aktion, OverlaySchliessen):
             self._ui.overlay_schliessen()
             self._bildschirm_pause(False)

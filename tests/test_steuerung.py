@@ -199,6 +199,17 @@ def test_korrektur_deckt_keine_stichprobe_auf():
     assert "overlay_zeigen" not in ui.namen() and "hinweis" not in ui.namen()
 
 
+def test_erneutes_overlay_zaehlt_nicht_als_neue_eskalation():
+    st, u, ui, *_ = aufbau()
+    insta = lambda t: pc(url="https://instagram.com", zeit=t)
+    ticks(st, u, 41, insta)
+    st.zurueck_zur_aufgabe()
+    ticks(st, u, 6, insta)
+    stufen = [e.details["stufe"] for e in st._speicher.ereignisse(st._session.id) if e.art == "eskalation"]
+    assert stufen == [1, 2] and "overlay_erneut" in arten(st)
+    assert ui.namen().count("overlay_zeigen") == 2
+
+
 def test_overlay_pausiert_bildschirm_anfragen():
     st, u, ui, sens, bl, r = aufbau()
     ticks(st, u, 41, lambda t: pc(url="https://instagram.com", zeit=t))
