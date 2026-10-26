@@ -33,6 +33,29 @@ def test_version_text(tmp_path):
     assert version_text(datei) == "abc1234 – Neue Funktion"
 
 
+def test_api_schluessel_notfalls_aus_registry():
+    from focusguard.app import uebernimm_api_schluessel
+    registry = lambda: "sk-ant-aus-registry"
+    umgebung = {}
+    uebernimm_api_schluessel(umgebung, "win32", registry)
+    assert umgebung == {"ANTHROPIC_API_KEY": "sk-ant-aus-registry"}
+    umgebung = {"ANTHROPIC_API_KEY": "sk-ant-gesetzt"}
+    uebernimm_api_schluessel(umgebung, "win32", registry)
+    assert umgebung == {"ANTHROPIC_API_KEY": "sk-ant-gesetzt"}
+    umgebung = {}
+    uebernimm_api_schluessel(umgebung, "linux", registry)
+    uebernimm_api_schluessel(umgebung, "win32", lambda: None)
+    assert umgebung == {}
+
+
+def test_main_uebernimmt_schluessel_vor_dem_start(monkeypatch):
+    import focusguard.app as app
+    aufrufe = []
+    monkeypatch.setattr(app, "uebernimm_api_schluessel", lambda: aufrufe.append("schluessel"))
+    monkeypatch.setattr(app, "importtest", lambda: aufrufe.append("importtest") or 0)
+    assert app.main(["--importtest"]) == 0 and aufrufe == ["schluessel", "importtest"]
+
+
 def test_importtest_laedt_alle_module():
     r = subprocess.run([sys.executable, "-m", "focusguard", "--importtest"], capture_output=True, text=True,
                        env={"PATH": "", "QT_QPA_PLATFORM": "offscreen"}, timeout=120)

@@ -31,6 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kamera-test", action="store_true", help="Gesicht, Kopfneigung und Handy live anzeigen")
     parser.add_argument("--importtest", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    uebernimm_api_schluessel()
     if args.importtest:
         return importtest()
     if args.pruefen:
@@ -38,6 +39,28 @@ def main(argv: list[str] | None = None) -> int:
     if args.kamera_test:
         return kamera_test()
     return starte_app()
+
+
+def _registry_schluessel() -> str | None:
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as schluessel:
+            wert, _ = winreg.QueryValueEx(schluessel, "ANTHROPIC_API_KEY")
+    except OSError:
+        return None
+    return wert if isinstance(wert, str) and wert.strip() else None
+
+
+def uebernimm_api_schluessel(umgebung=None, plattform: str = sys.platform, lies_registry=_registry_schluessel) -> None:
+    """Ein gerade erst gespeicherter Schlüssel fehlt in Prozessen, die vorher gestartet wurden. Unter Windows
+    steht er dann schon in der Registry (HKCU\\Environment); von dort übernehmen wir ihn."""
+    umgebung = os.environ if umgebung is None else umgebung
+    if umgebung.get("ANTHROPIC_API_KEY") or plattform != "win32":
+        return
+    wert = lies_registry()
+    if wert:
+        umgebung["ANTHROPIC_API_KEY"] = wert
 
 
 # --- Selbsttest ------------------------------------------------------------------------------------
