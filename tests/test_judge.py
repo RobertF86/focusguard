@@ -165,20 +165,52 @@ def test_programm_wird_nach_15_minuten_neu_beurteilt():
     assert [x.quelle for x in e.ki_anfragen(903) if x.art is KiArt.SEITE] == ["seite:claude.exe|Claude"]
 
 
-def test_neutrales_fenster_laesst_vorheriges_urteil_stehen():
+def test_neutrales_fenster_ueberbrueckt_nur_kurz():
     e = ent()
     e.pc(pc(url="https://instagram.com", zeit=1))
     e.pc(pc("explorer.exe", titel="Task Switching", zeit=2))
-    assert e.urteil(2).quelle == "domain:instagram.com"
-    e.pc(pc("sharex.exe", titel="ShareX - Image editor", zeit=9))
-    assert e.urteil(9).quelle == "domain:instagram.com"      # veraltet nicht, solange das neutrale Fenster vorne ist
-    assert e.ki_anfragen(9) == []
+    assert e.urteil(2).quelle == "domain:instagram.com"          # kurzes Alt+Tab ändert nichts
+    for t in range(3, 121):                                       # Fenster minimiert oder geschlossen: Desktop vorne
+        e.pc(pc("explorer.exe", titel="Program Manager", zeit=t))
+    u = e.urteil(120)
+    assert (u.status, u.herkunft) == (Status.UNKLAR, "neutral")
+    assert [a for a in e.ki_anfragen(120) if a.art is KiArt.SEITE] == []
 
 
 def test_neutrales_fenster_ohne_vorheriges_urteil():
     e = ent()
     e.pc(pc("explorer.exe", titel="", zeit=1))
-    assert e.urteil(1).status is Status.FOKUS and e.ki_anfragen(1) == []
+    u = e.urteil(1)
+    assert (u.status, u.herkunft) == (Status.UNKLAR, "neutral") and e.ki_anfragen(1) == []
+
+
+def test_neutrales_fenster_ist_das_aktuelle_fenster():
+    e = ent()
+    e.pc(pc(url="https://example.org", titel="T", zeit=1))
+    e.pc(pc("startmenuexperiencehost.exe", titel="Start", zeit=2))
+    assert e.letzte_pc.prozess == "startmenuexperiencehost.exe"    # für die Prüfung „Seite nicht mehr aktiv“
+
+
+def test_keine_seiten_anfrage_waehrend_neutrales_fenster_vorne():
+    e = ent()
+    e.pc(pc(url="https://example.org", titel="T", zeit=1))
+    [a] = e.ki_anfragen(1)
+    e.ki_ergebnis(KiErgebnis(a, None, "Netz weg", 0, 0), 2)       # nächster Versuch ab 32 s
+    e.pc(pc(url="https://example.org", titel="T", zeit=31))
+    e.pc(pc("explorer.exe", titel="", zeit=32))
+    assert e.ki_anfragen(33) == []
+    e.pc(pc(url="https://example.org", titel="T", zeit=34))
+    assert len(e.ki_anfragen(34)) == 1
+
+
+def test_gesperrter_bildschirm_mit_webcam_gilt_als_abwesend():
+    e = ent()
+    e.webcam(W(0, True, 5))
+    e.pc(pc(url="https://instagram.com", zeit=1))
+    for t in range(1, 21):
+        e.webcam(W(t, False, None))
+        e.pc(pc("lockapp.exe", titel="Sperrbildschirm", zeit=t + 0.5))
+    assert e.urteil(20).status is Status.ABWESEND
 
 
 def stichproben(e, t):

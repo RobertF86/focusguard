@@ -4,7 +4,6 @@ und entscheidet, wann die KI gefragt wird."""
 from __future__ import annotations
 
 import math
-from dataclasses import replace
 
 from ..config import Einstellungen
 from ..models import (QUELLE_HANDY, QUELLE_STICHPROBE, AufgabenListen, GedaechtnisEintrag, HandyBeobachtung,
@@ -42,7 +41,8 @@ class Entscheider:
         self._pc_aktiv, self._webcam_aktiv, self._smartphone_aktiv = s.pc, s.webcam, s.smartphone
         self.kamera = KameraBewerter(einst.erkennung, einst.ki.handy_pruefung_sekunden, start,
                                      s.webcam, s.smartphone)
-        self._letzte_pc: PcBeobachtung | None = None
+        self._letzte_pc: PcBeobachtung | None = None     # letztes nicht neutrales Fenster: daraus kommt das Urteil
+        self._vordergrund: PcBeobachtung | None = None   # tatsächlich vorne, auch ein neutrales Fenster
         self._unterwegs: set[str] = set()
         self._naechster_versuch: dict[str, float] = {}
 
@@ -59,19 +59,21 @@ class Entscheider:
 
     @property
     def letzte_pc(self) -> PcBeobachtung | None:
-        return self._letzte_pc
+        """Das zuletzt beobachtete Vordergrundfenster, auch wenn es neutral ist."""
+        return self._vordergrund
+
+    def _neutral_vorne(self) -> bool:
+        return self._vordergrund is not None and self._vordergrund is not self._letzte_pc
 
     def setze_sensoren(self, pc: bool, webcam: bool, smartphone: bool) -> None:
         self._pc_aktiv, self._webcam_aktiv, self._smartphone_aktiv = pc, webcam, smartphone
         self.kamera.setze_aktiv(webcam, smartphone)
 
     def pc(self, b: PcBeobachtung) -> None:
-        if ist_neutral(b, self._einst.listen.neutral_programme):
-            # Desktop, Alt+Tab, Screenshot-Werkzeug …: Das Fenster davor gilt weiter und veraltet nicht.
-            if self._letzte_pc is not None:
-                self._letzte_pc = replace(self._letzte_pc, zeit=b.zeit)
-            return
-        self._letzte_pc = b
+        self._vordergrund = b
+        # Desktop, Alt+Tab, Screenshot-Werkzeug …: Das Fenster davor gilt weiter, bis es nach PC_VERALTET_S veraltet.
+        if not ist_neutral(b, self._einst.listen.neutral_programme):
+            self._letzte_pc = b
 
     def webcam(self, b: WebcamBeobachtung) -> None:
         self.kamera.webcam(b)
@@ -80,8 +82,15 @@ class Entscheider:
         self.kamera.handy(b)
 
     def _pc_urteil(self, jetzt: float) -> Urteil | None:
+        if not self._pc_aktiv:
+            return None
         b = self._letzte_pc
-        if not self._pc_aktiv or b is None or jetzt - b.zeit > PC_VERALTET_S:
+        if b is None or jetzt - b.zeit > PC_VERALTET_S:
+            v = self._vordergrund
+            if self._neutral_vorne() and jetzt - v.zeit <= PC_VERALTET_S:
+                # Nur noch ein neutrales Fenster vorne (Desktop, Sperrbildschirm …): unklar, aber ohne KI-Frage.
+                return Urteil(Status.UNKLAR, quelle_seite(seiten_schluessel(v)), "System- oder Werkzeugfenster",
+                              "neutral")
             return None
         u = regel_urteil(b, self._listen, self._einst.listen)
         if u is not None:
@@ -104,7 +113,8 @@ class Entscheider:
         if self._sp_zustand == "bestaetigt" and jetzt > self._sp_bestaetigt_bis:
             self._stichprobe_zuruecksetzen(jetzt, KI_FEHLER_PAUSE_S)    # Nachprüfung überfällig: zu deinen Gunsten
         pc_u = self._pc_urteil(jetzt)
-        if pc_u is not None and pc_u.status is Status.UNKLAR and pc_u.herkunft == "lokal":
+        if (pc_u is not None and pc_u.status is Status.UNKLAR and pc_u.herkunft == "lokal"
+                and not self._neutral_vorne()):                # Screenshot und Titel würden nicht zusammenpassen
             q = pc_u.quelle
             if q not in self._unterwegs and jetzt >= self._naechster_versuch.get(q, -math.inf):
                 self._unterwegs.add(q)
@@ -121,7 +131,7 @@ class Entscheider:
                 and _hoechstes([pc_u, self.kamera.urteil(jetzt)]).status is not Status.ABWESEND):
             self._unterwegs.add(QUELLE_STICHPROBE)
             neu.append(KiAnfrage(KiArt.STICHPROBE, QUELLE_STICHPROBE, jetzt,
-                                 self._letzte_pc if self._pc_aktiv else None, self._pc_aktiv, kamera_an))
+                                 self._vordergrund if self._pc_aktiv else None, self._pc_aktiv, kamera_an))
         return neu
 
     def ki_ergebnis(self, e: KiErgebnis, jetzt: float) -> GedaechtnisEintrag | None:
