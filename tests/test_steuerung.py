@@ -162,6 +162,54 @@ def test_ki_ergebnis_nach_sessionende_ignoriert():
     st.tick()  # must not raise
 
 
+def _bestaetige_stichprobe(st, u, r, beob):
+    """Zwei Stichproben in Folge melden Ablenkung, danach gilt sie als bestätigt."""
+    ticks(st, u, 121, beob)
+    for _ in range(2):
+        a = [x for x in r.anfragen if x.art is KiArt.STICHPROBE][-1]
+        st.ki_ergebnis(KiErgebnis(a, KiUrteil(Status.ABGELENKT, "Video auf Monitor 2", 0.9, "seite"), None))
+        ticks(st, u, 31, beob)
+
+
+def test_bestaetigte_stichprobe_beginnt_mit_hinweis():
+    st, u, ui, sens, bl, r = aufbau()
+    _bestaetige_stichprobe(st, u, r, lambda t: pc("blender.exe", zeit=t))
+    assert "hinweis" in ui.namen() and "overlay_zeigen" not in ui.namen()
+
+
+def test_zurueck_zur_aufgabe_beendet_stichproben_ablenkung():
+    st, u, ui, sens, bl, r = aufbau()
+    blender = lambda t: pc("blender.exe", zeit=t)
+    _bestaetige_stichprobe(st, u, r, blender)
+    ticks(st, u, 15, blender)
+    assert "overlay_zeigen" in ui.namen()
+    st.zurueck_zur_aufgabe()
+    ui.log.clear()
+    ticks(st, u, 20, blender)
+    assert "overlay_zeigen" not in ui.namen() and "hinweis" not in ui.namen()
+
+
+def test_korrektur_deckt_keine_stichprobe_auf():
+    st, u, ui, sens, bl, r = aufbau()
+    insta = lambda t: pc(url="https://instagram.com", zeit=t)
+    _bestaetige_stichprobe(st, u, r, insta)
+    st.gehoert_zur_aufgabe("domain:instagram.com")
+    ui.log.clear()
+    ticks(st, u, 20, insta)
+    assert "overlay_zeigen" not in ui.namen() and "hinweis" not in ui.namen()
+
+
+def test_erneutes_overlay_zaehlt_nicht_als_neue_eskalation():
+    st, u, ui, *_ = aufbau()
+    insta = lambda t: pc(url="https://instagram.com", zeit=t)
+    ticks(st, u, 41, insta)
+    st.zurueck_zur_aufgabe()
+    ticks(st, u, 6, insta)
+    stufen = [e.details["stufe"] for e in st._speicher.ereignisse(st._session.id) if e.art == "eskalation"]
+    assert stufen == [1, 2] and "overlay_erneut" in arten(st)
+    assert ui.namen().count("overlay_zeigen") == 2
+
+
 def test_overlay_pausiert_bildschirm_anfragen():
     st, u, ui, sens, bl, r = aufbau()
     ticks(st, u, 41, lambda t: pc(url="https://instagram.com", zeit=t))

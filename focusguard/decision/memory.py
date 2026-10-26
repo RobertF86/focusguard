@@ -1,4 +1,9 @@
-"""Gedächtnis der KI-Urteile pro Seite, Domain oder Programm."""
+"""Gedächtnis der KI-Urteile pro Seite oder Domain.
+
+Ganze Programme legen nur die Listen fest. Ein KI-Urteil über ein Programm gilt pro Fenstertitel und nur
+PROGRAMM_GUELTIG_S lang: In Programmen wie Claude oder dem Explorer bleibt der Titel gleich, der Inhalt nicht.
+Deine eigenen Korrekturen („Gehört zur Aufgabe“) laufen nie ab.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,13 @@ from .rules import ist_misch_plattform
 from ..models import (GedaechtnisEintrag, KiUrteil, PcBeobachtung, Status, quelle_domain, quelle_prozess,
                       quelle_seite)
 
+PROGRAMM_GUELTIG_S = 15 * 60
+KORREKTUR_BEGRUENDUNG = "Von dir als passend markiert"
+
+
+def ist_korrektur(e: GedaechtnisEintrag) -> bool:
+    return e.status is Status.FOKUS and e.begruendung == KORREKTUR_BEGRUENDUNG
+
 
 def seiten_schluessel(b: PcBeobachtung) -> str:
     return f"{b.domain or b.prozess}|{b.fenstertitel}"
@@ -16,15 +28,8 @@ def seiten_schluessel(b: PcBeobachtung) -> str:
 def eintrag_fuer(b: PcBeobachtung, u: KiUrteil, aufgabe_key: str, zeit: float) -> GedaechtnisEintrag | None:
     if u.status is Status.UNKLAR:
         return None
-    ebene = u.gilt_fuer
-    if ebene == "domain" and (not b.domain or ist_misch_plattform(b.domain)):
-        ebene = "seite"
-    if ebene == "programm" and b.ist_browser:
-        ebene = "seite"
-    if ebene == "domain":
-        schluessel = b.domain
-    elif ebene == "programm":
-        schluessel = b.prozess
+    if u.gilt_fuer == "domain" and b.domain and not ist_misch_plattform(b.domain):
+        ebene, schluessel = "domain", b.domain
     else:
         ebene, schluessel = "seite", seiten_schluessel(b)
     return GedaechtnisEintrag(aufgabe_key, ebene, schluessel, u.status, u.begruendung, u.sicherheit, zeit)
@@ -47,13 +52,11 @@ class Gedaechtnis:
     def merke(self, e: GedaechtnisEintrag) -> None:
         self._eintraege[(e.ebene, e.schluessel)] = e
 
-    def suche(self, b: PcBeobachtung) -> GedaechtnisEintrag | None:
-        kandidaten = [("seite", seiten_schluessel(b))]
-        if b.domain:
-            kandidaten.append(("domain", b.domain))
-        if not b.ist_browser:
-            kandidaten.append(("programm", b.prozess))
-        for k in kandidaten:
-            if k in self._eintraege:
-                return self._eintraege[k]
-        return None
+    def suche(self, b: PcBeobachtung, jetzt: float) -> GedaechtnisEintrag | None:
+        seite = self._eintraege.get(("seite", seiten_schluessel(b)))
+        if seite is not None and not b.ist_browser and not ist_korrektur(seite) \
+                and jetzt - seite.zeit > PROGRAMM_GUELTIG_S:
+            seite = None                                       # altes KI-Urteil über ein Programm: neu fragen
+        if seite is not None:
+            return seite
+        return self._eintraege.get(("domain", b.domain)) if b.domain else None

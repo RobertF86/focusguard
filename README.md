@@ -109,7 +109,9 @@ blau = du bist nicht am Platz.
 
 Alles liegt lokal in `%APPDATA%\FocusGuard\`:
 
-- `settings.toml`: alle Einstellungen (Zeitstufen, Modell, Listen …)
+- `settings.toml`: alle Einstellungen (Zeitstufen, Modell, Listen …). Unter `neutral_programme` stehen Programme,
+  die das Urteil nicht ändern, etwa Startmenü, Suche und Screenshot-Werkzeuge wie ShareX. Desktop, Taskleiste und
+  Alt+Tab sind immer neutral. Fehlt der Eintrag in einer älteren `settings.toml`, gilt die Standardliste.
 - `focusguard.db`: Sessions, Ereignisse, KI-Urteile, Listen pro Aufgabe
 - `modelle\`: die beiden MediaPipe-Modelle
 - `bilder\`: nur wenn `bilder_speichern = true`; dort landen die an die KI geschickten Bilder samt Urteil
@@ -147,7 +149,11 @@ selbst ausprobieren:
    der Hinweis (also nach ca. 13 s). Weitermachen → Overlay, nach ca. 73 s das Overlay „Leg das Handy weg“, das etwa
    8 s nach dem Weglegen verschwindet.
 10. 6 Minuten weggehen → Icon blau, beim Zurückkommen eine Begrüßung.
-11. Video auf dem zweiten Monitor, Blender im Vordergrund → wird innerhalb von ca. 2,5 Minuten erkannt.
+11. Video auf dem zweiten Monitor, Blender im Vordergrund → innerhalb von ca. 3 Minuten ein Hinweis, das Overlay
+    etwa 30 s danach, nie eine Sperre. Bei einem Rückfall innerhalb von 5 Minuten kommt wie überall gleich das
+    Overlay. Ein offenes, ruhendes Fenster auf dem zweiten Monitor (Messenger, Shop)
+    zählt dagegen nicht als Ablenkung. „Zurück zur Aufgabe“ beendet diese Ablenkung, das Overlay kommt nicht gleich
+    wieder.
 12. Kamera durch ein anderes Programm belegen (z. B. Teams-Anruf) → Tooltip zeigt „Kamera nicht verfügbar“, keine
     Abwesenheit.
 13. „Sperren aufheben“ und „Beenden“ wirken jederzeit sofort; nach einer Session öffnet sich die Auswertung.
@@ -155,7 +161,7 @@ selbst ausprobieren:
 
 ## Entwicklung
 
-Ohne Installer, direkt aus einem Checkout im Ordner `FocusGuard`:
+Ohne Installer, direkt aus einem Checkout dieses Repos:
 
 ```bat
 py -3.12 -m venv .venv

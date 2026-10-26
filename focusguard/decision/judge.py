@@ -10,8 +10,8 @@ from ..models import (QUELLE_HANDY, QUELLE_STICHPROBE, AufgabenListen, Gedaechtn
                       KiAnfrage, KiArt, KiErgebnis, PcBeobachtung, Status, Urteil, WebcamBeobachtung,
                       quelle_seite)
 from .kamera_regeln import KameraBewerter
-from .memory import Gedaechtnis, eintrag_fuer, quelle_fuer, seiten_schluessel
-from .rules import regel_urteil
+from .memory import KORREKTUR_BEGRUENDUNG, Gedaechtnis, eintrag_fuer, quelle_fuer, seiten_schluessel
+from .rules import ist_neutral, regel_urteil
 
 PC_VERALTET_S = 5.0
 KI_FEHLER_PAUSE_S = 30.0
@@ -41,15 +41,17 @@ class Entscheider:
         self._pc_aktiv, self._webcam_aktiv, self._smartphone_aktiv = s.pc, s.webcam, s.smartphone
         self.kamera = KameraBewerter(einst.erkennung, einst.ki.handy_pruefung_sekunden, start,
                                      s.webcam, s.smartphone)
-        self._letzte_pc: PcBeobachtung | None = None
+        self._letzte_pc: PcBeobachtung | None = None     # letztes nicht neutrales Fenster: daraus kommt das Urteil
+        self._vordergrund: PcBeobachtung | None = None   # tatsächlich vorne, auch ein neutrales Fenster
         self._unterwegs: set[str] = set()
         self._naechster_versuch: dict[str, float] = {}
 
         self._sp_zustand = "ruhig"           # ruhig → verdacht → bestaetigt
         self._sp_naechste = start + einst.ki.stichprobe_sekunden
-        self._sp_verdacht_start: float | None = None
+        self._sp_bestaetigt_seit: float | None = None
         self._sp_begruendung = ""
         self._sp_bestaetigt_bis = -math.inf   # ohne neue Bestätigung endet die Stichproben-Ablenkung
+        self._sp_zurueckgesetzt = -math.inf   # Ergebnisse von Anfragen vor diesem Zeitpunkt zählen nicht mehr
 
     @property
     def listen(self) -> AufgabenListen:
@@ -57,14 +59,21 @@ class Entscheider:
 
     @property
     def letzte_pc(self) -> PcBeobachtung | None:
-        return self._letzte_pc
+        """Das zuletzt beobachtete Vordergrundfenster, auch wenn es neutral ist."""
+        return self._vordergrund
+
+    def _neutral_vorne(self) -> bool:
+        return self._vordergrund is not None and self._vordergrund is not self._letzte_pc
 
     def setze_sensoren(self, pc: bool, webcam: bool, smartphone: bool) -> None:
         self._pc_aktiv, self._webcam_aktiv, self._smartphone_aktiv = pc, webcam, smartphone
         self.kamera.setze_aktiv(webcam, smartphone)
 
     def pc(self, b: PcBeobachtung) -> None:
-        self._letzte_pc = b
+        self._vordergrund = b
+        # Desktop, Alt+Tab, Screenshot-Werkzeug …: Das Fenster davor gilt weiter, bis es nach PC_VERALTET_S veraltet.
+        if not ist_neutral(b, self._einst.listen.neutral_programme):
+            self._letzte_pc = b
 
     def webcam(self, b: WebcamBeobachtung) -> None:
         self.kamera.webcam(b)
@@ -73,13 +82,20 @@ class Entscheider:
         self.kamera.handy(b)
 
     def _pc_urteil(self, jetzt: float) -> Urteil | None:
+        if not self._pc_aktiv:
+            return None
         b = self._letzte_pc
-        if not self._pc_aktiv or b is None or jetzt - b.zeit > PC_VERALTET_S:
+        if b is None or jetzt - b.zeit > PC_VERALTET_S:
+            v = self._vordergrund
+            if self._neutral_vorne() and jetzt - v.zeit <= PC_VERALTET_S:
+                # Nur noch ein neutrales Fenster vorne (Desktop, Sperrbildschirm …): unklar, aber ohne KI-Frage.
+                return Urteil(Status.UNKLAR, quelle_seite(seiten_schluessel(v)), "System- oder Werkzeugfenster",
+                              "neutral")
             return None
         u = regel_urteil(b, self._listen, self._einst.listen)
         if u is not None:
             return u
-        e = self._gedaechtnis.suche(b)
+        e = self._gedaechtnis.suche(b, jetzt)
         if e is not None:
             return Urteil(e.status, quelle_fuer(e), e.begruendung, "gedaechtnis")
         return Urteil(Status.UNKLAR, quelle_seite(seiten_schluessel(b)), "Noch nicht beurteilt", "lokal")
@@ -87,7 +103,7 @@ class Entscheider:
     def _stichprobe_urteil(self, jetzt: float) -> Urteil | None:
         if self._sp_zustand != "bestaetigt" or jetzt > self._sp_bestaetigt_bis:
             return None
-        return Urteil(Status.ABGELENKT, QUELLE_STICHPROBE, self._sp_begruendung, "ki", seit=self._sp_verdacht_start)
+        return Urteil(Status.ABGELENKT, QUELLE_STICHPROBE, self._sp_begruendung, "ki", seit=self._sp_bestaetigt_seit)
 
     def urteil(self, jetzt: float) -> Urteil:
         return _hoechstes([self._pc_urteil(jetzt), self.kamera.urteil(jetzt), self._stichprobe_urteil(jetzt)])
@@ -97,7 +113,8 @@ class Entscheider:
         if self._sp_zustand == "bestaetigt" and jetzt > self._sp_bestaetigt_bis:
             self._stichprobe_zuruecksetzen(jetzt, KI_FEHLER_PAUSE_S)    # Nachprüfung überfällig: zu deinen Gunsten
         pc_u = self._pc_urteil(jetzt)
-        if pc_u is not None and pc_u.status is Status.UNKLAR and pc_u.herkunft == "lokal":
+        if (pc_u is not None and pc_u.status is Status.UNKLAR and pc_u.herkunft == "lokal"
+                and not self._neutral_vorne()):                # Screenshot und Titel würden nicht zusammenpassen
             q = pc_u.quelle
             if q not in self._unterwegs and jetzt >= self._naechster_versuch.get(q, -math.inf):
                 self._unterwegs.add(q)
@@ -114,7 +131,7 @@ class Entscheider:
                 and _hoechstes([pc_u, self.kamera.urteil(jetzt)]).status is not Status.ABWESEND):
             self._unterwegs.add(QUELLE_STICHPROBE)
             neu.append(KiAnfrage(KiArt.STICHPROBE, QUELLE_STICHPROBE, jetzt,
-                                 self._letzte_pc if self._pc_aktiv else None, self._pc_aktiv, kamera_an))
+                                 self._vordergrund if self._pc_aktiv else None, self._pc_aktiv, kamera_an))
         return neu
 
     def ki_ergebnis(self, e: KiErgebnis, jetzt: float) -> GedaechtnisEintrag | None:
@@ -137,15 +154,17 @@ class Entscheider:
         return None
 
     def _stichprobe_ergebnis(self, a: KiAnfrage, e: KiErgebnis, jetzt: float) -> None:
+        if a.zeit <= self._sp_zurueckgesetzt:
+            return
         if e.urteil is None:
             self._stichprobe_zuruecksetzen(jetzt, KI_FEHLER_PAUSE_S)    # KI nicht erreichbar: zu deinen Gunsten
             return
         if e.urteil.status is Status.ABGELENKT:
             if self._sp_zustand == "ruhig":
                 self._sp_zustand = "verdacht"
-                self._sp_verdacht_start = a.zeit
             elif self._sp_zustand == "verdacht":
                 self._sp_zustand = "bestaetigt"
+                self._sp_bestaetigt_seit = jetzt    # ab hier zählt die Eskalation: erst Hinweis, dann Overlay
             self._sp_begruendung = e.urteil.begruendung
             self._sp_naechste = jetzt + self._einst.ki.stichprobe_nachpruefung_sekunden
             self._sp_bestaetigt_bis = jetzt + 2 * self._einst.ki.stichprobe_nachpruefung_sekunden
@@ -154,10 +173,16 @@ class Entscheider:
 
     def _stichprobe_zuruecksetzen(self, jetzt: float, pause_s: float | None = None) -> None:
         self._sp_zustand = "ruhig"
-        self._sp_verdacht_start = None
+        self._sp_bestaetigt_seit = None
         self._sp_naechste = jetzt + (self._einst.ki.stichprobe_sekunden if pause_s is None else pause_s)
 
+    def stichprobe_zuruecksetzen(self, jetzt: float) -> None:
+        """Die Person hat auf ein Overlay reagiert: Die Stichprobe fängt von vorn an."""
+        self._sp_zurueckgesetzt = jetzt
+        self._stichprobe_zuruecksetzen(jetzt)
+
     def korrektur(self, quelle: str, jetzt: float) -> tuple[AufgabenListen | None, GedaechtnisEintrag | None]:
+        self.stichprobe_zuruecksetzen(jetzt)
         if quelle.startswith("domain:"):
             self._listen = self._listen.mit_fokus_domain(quelle.removeprefix("domain:"))
             return self._listen, None
@@ -166,11 +191,9 @@ class Entscheider:
             return self._listen, None
         if quelle.startswith("seite:"):
             eintrag = GedaechtnisEintrag(self._aufgabe_key, "seite", quelle.removeprefix("seite:"), Status.FOKUS,
-                                         "Von dir als passend markiert", 1.0, jetzt)
+                                         KORREKTUR_BEGRUENDUNG, 1.0, jetzt)
             self._gedaechtnis.merke(eintrag)
             return None, eintrag
         if quelle == QUELLE_HANDY:
             self.kamera.handy_aussetzen(jetzt + HANDY_KORREKTUR_PAUSE_S)
-        elif quelle == QUELLE_STICHPROBE:
-            self._stichprobe_zuruecksetzen(jetzt)
         return None, None

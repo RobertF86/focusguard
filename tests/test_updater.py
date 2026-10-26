@@ -254,14 +254,16 @@ def test_umbenennen_versucht_es_mehrmals(tmp_path, monkeypatch):
     assert (tmp_path / "b").exists() and zaehler["n"] == 3
 
 
-def test_branch_weg_gibt_klare_meldung():
+def test_repo_oder_branch_weg_gibt_klare_meldung():
     import urllib.error
 
     def weg(url, timeout):
         raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
 
-    with pytest.raises(UpdateFehler, match="update.json"):
-        neuester_stand(lade_konfig_standard(), weg)
+    with pytest.raises(UpdateFehler) as fehler:
+        neuester_stand(Konfig("RobertF86/altes-repo", "alter-branch", ""), weg)
+    meldung = str(fehler.value)
+    assert "RobertF86/altes-repo" in meldung and "alter-branch" in meldung and "update.json" in meldung
 
 
 def test_starten_startet_auch_nach_unerwartetem_fehler(tmp_path, monkeypatch):

@@ -92,7 +92,10 @@ def test_stichprobe_alle_120_s_mit_bestaetigung():
     [b] = e.ki_anfragen(155)
     ki(e, b, Status.ABGELENKT, 156)
     u = e.urteil(156)
-    assert (u.status, u.quelle, u.seit) == (Status.ABGELENKT, "stichprobe", 120)
+    assert (u.status, u.quelle, u.seit) == (Status.ABGELENKT, "stichprobe", 156)   # zählt ab der Bestätigung
+    [c] = stichproben(e, 186)
+    ki(e, c, Status.ABGELENKT, 187)
+    assert e.urteil(187).seit == 156
 
 
 def test_stichprobe_nachpruefung_negativ():
@@ -148,3 +151,93 @@ def test_stichprobe_bestaetigung_laeuft_ab():
     assert e.urteil(200).quelle == "stichprobe"
     e.pc(pc("blender.exe", zeit=217))
     assert e.urteil(217).status is Status.FOKUS
+
+
+def test_programm_wird_nach_15_minuten_neu_beurteilt():
+    e = ent()
+    e.pc(pc("claude.exe", titel="Claude", zeit=1))
+    [a] = e.ki_anfragen(1)
+    ki(e, a, Status.ABGELENKT, 2, gilt="programm")
+    e.pc(pc("claude.exe", titel="Claude", zeit=902))
+    assert e.urteil(902).status is Status.ABGELENKT
+    e.pc(pc("claude.exe", titel="Claude", zeit=903))
+    assert e.urteil(903).status is Status.UNKLAR
+    assert [x.quelle for x in e.ki_anfragen(903) if x.art is KiArt.SEITE] == ["seite:claude.exe|Claude"]
+
+
+def test_neutrales_fenster_ueberbrueckt_nur_kurz():
+    e = ent()
+    e.pc(pc(url="https://instagram.com", zeit=1))
+    e.pc(pc("explorer.exe", titel="Task Switching", zeit=2))
+    assert e.urteil(2).quelle == "domain:instagram.com"          # kurzes Alt+Tab ändert nichts
+    for t in range(3, 121):                                       # Fenster minimiert oder geschlossen: Desktop vorne
+        e.pc(pc("explorer.exe", titel="Program Manager", zeit=t))
+    u = e.urteil(120)
+    assert (u.status, u.herkunft) == (Status.UNKLAR, "neutral")
+    assert [a for a in e.ki_anfragen(120) if a.art is KiArt.SEITE] == []
+
+
+def test_neutrales_fenster_ohne_vorheriges_urteil():
+    e = ent()
+    e.pc(pc("explorer.exe", titel="", zeit=1))
+    u = e.urteil(1)
+    assert (u.status, u.herkunft) == (Status.UNKLAR, "neutral") and e.ki_anfragen(1) == []
+
+
+def test_neutrales_fenster_ist_das_aktuelle_fenster():
+    e = ent()
+    e.pc(pc(url="https://example.org", titel="T", zeit=1))
+    e.pc(pc("startmenuexperiencehost.exe", titel="Start", zeit=2))
+    assert e.letzte_pc.prozess == "startmenuexperiencehost.exe"    # für die Prüfung „Seite nicht mehr aktiv“
+
+
+def test_keine_seiten_anfrage_waehrend_neutrales_fenster_vorne():
+    e = ent()
+    e.pc(pc(url="https://example.org", titel="T", zeit=1))
+    [a] = e.ki_anfragen(1)
+    e.ki_ergebnis(KiErgebnis(a, None, "Netz weg", 0, 0), 2)       # nächster Versuch ab 32 s
+    e.pc(pc(url="https://example.org", titel="T", zeit=31))
+    e.pc(pc("explorer.exe", titel="", zeit=32))
+    assert e.ki_anfragen(33) == []
+    e.pc(pc(url="https://example.org", titel="T", zeit=34))
+    assert len(e.ki_anfragen(34)) == 1
+
+
+def test_gesperrter_bildschirm_mit_webcam_gilt_als_abwesend():
+    e = ent()
+    e.webcam(W(0, True, 5))
+    e.pc(pc(url="https://instagram.com", zeit=1))
+    for t in range(1, 21):
+        e.webcam(W(t, False, None))
+        e.pc(pc("lockapp.exe", titel="Sperrbildschirm", zeit=t + 0.5))
+    assert e.urteil(20).status is Status.ABWESEND
+
+
+def stichproben(e, t):
+    return [a for a in e.ki_anfragen(t) if a.art is KiArt.STICHPROBE]
+
+
+def test_stichprobe_zuruecksetzen_beendet_ablenkung_und_wartet_normal():
+    e = _bestaetigte_stichprobe()
+    e.stichprobe_zuruecksetzen(160)
+    e.pc(pc("blender.exe", zeit=160))
+    assert e.urteil(160).status is Status.FOKUS
+    assert stichproben(e, 279) == [] and len(stichproben(e, 280)) == 1
+
+
+def test_stichprobe_aus_dem_moment_des_zuruecksetzens_wird_verworfen():
+    e = _bestaetigte_stichprobe()
+    [c] = stichproben(e, 186)
+    e.stichprobe_zuruecksetzen(186)
+    ki(e, c, Status.ABGELENKT, 187)
+    assert stichproben(e, 305) == [] and len(stichproben(e, 306)) == 1
+
+
+def test_stichprobe_von_vor_dem_zuruecksetzen_wird_verworfen():
+    e = _bestaetigte_stichprobe()
+    [c] = stichproben(e, 186)
+    e.stichprobe_zuruecksetzen(190)
+    ki(e, c, Status.ABGELENKT, 191)
+    e.pc(pc("blender.exe", zeit=192))
+    assert e.urteil(192).status is Status.FOKUS
+    assert stichproben(e, 309) == [] and len(stichproben(e, 310)) == 1

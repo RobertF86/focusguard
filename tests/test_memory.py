@@ -1,4 +1,5 @@
-from focusguard.decision.memory import seiten_schluessel, eintrag_fuer, quelle_fuer, Gedaechtnis
+from focusguard.decision.memory import (KORREKTUR_BEGRUENDUNG, seiten_schluessel, eintrag_fuer, quelle_fuer,
+                                       Gedaechtnis)
 from focusguard.models import KiUrteil, Status, GedaechtnisEintrag
 from hilfen import pc
 
@@ -15,16 +16,39 @@ def test_eintrag_ebenen():
     assert eintrag_fuer(docs, KiUrteil(Status.FOKUS, "ok", 0.9, "domain"), "k", 1.0).schluessel == "docs.blender.org"
     assert eintrag_fuer(pc("firefox.exe", titel="T"), KiUrteil(Status.FOKUS, "ok", 0.9, "domain"), "k", 1.0).ebene == "seite"
     assert eintrag_fuer(YT, KiUrteil(Status.FOKUS, "ok", 0.9, "programm"), "k", 1.0).ebene == "seite"
-    assert eintrag_fuer(pc("blender.exe"), KiUrteil(Status.FOKUS, "ok", 0.9, "programm"), "k", 1.0).schluessel == "blender.exe"
     assert eintrag_fuer(YT, KiUrteil(Status.UNKLAR, "?", 0.3, "seite"), "k", 1.0) is None
+
+
+def test_ki_urteil_gilt_nie_fuer_ein_ganzes_programm():
+    e = eintrag_fuer(pc("claude.exe", titel="Claude"), KiUrteil(Status.ABGELENKT, "Gitarren-App", 0.85, "programm"),
+                     "k", 1.0)
+    assert (e.ebene, e.schluessel) == ("seite", "claude.exe|Claude")
+
+
+def test_suche_ignoriert_alte_programm_eintraege():
+    g = Gedaechtnis([GedaechtnisEintrag("k", "programm", "claude.exe", Status.ABGELENKT, "", 0.85, 0)])
+    assert g.suche(pc("claude.exe", titel="Claude"), 1) is None
+
+
+def test_ki_urteil_ueber_programm_laeuft_nach_15_minuten_ab():
+    claude = pc("claude.exe", titel="Claude")
+    g = Gedaechtnis([GedaechtnisEintrag("k", "seite", "claude.exe|Claude", Status.ABGELENKT, "", 0.85, 0)])
+    assert g.suche(claude, 900) is not None and g.suche(claude, 901) is None
+    alt = Gedaechtnis([GedaechtnisEintrag("k", "seite", "claude.exe|Claude", Status.ABGELENKT, "Du chattest", 1.0, 0)])
+    assert alt.suche(claude, 901) is None                                 # KI-Urteil mit Sicherheit 1.0 aus alter DB
+    korrigiert = Gedaechtnis([GedaechtnisEintrag("k", "seite", "claude.exe|Claude", Status.FOKUS,
+                                                 KORREKTUR_BEGRUENDUNG, 1.0, 0)])
+    assert korrigiert.suche(claude, 100_000) is not None                  # deine Korrektur läuft nie ab
+    seite = Gedaechtnis([GedaechtnisEintrag("k", "seite", "youtube.com|Blender Donut", Status.FOKUS, "", 0.9, 0)])
+    assert seite.suche(YT, 100_000) is not None                           # Browser-Seiten laufen nicht ab
 
 
 def test_suche_reihenfolge():
     g = Gedaechtnis([GedaechtnisEintrag("k", "domain", "youtube.com", Status.ABGELENKT, "", 0.9, 0),
                      GedaechtnisEintrag("k", "seite", "youtube.com|Blender Donut", Status.FOKUS, "", 0.9, 0)])
-    assert g.suche(YT).status is Status.FOKUS
-    assert g.suche(pc(url="https://youtube.com/x", titel="Katzen")).status is Status.ABGELENKT
-    assert g.suche(pc(url="https://example.org")) is None
+    assert g.suche(YT, 1).status is Status.FOKUS
+    assert g.suche(pc(url="https://youtube.com/x", titel="Katzen"), 1).status is Status.ABGELENKT
+    assert g.suche(pc(url="https://example.org"), 1) is None
 
 
 def test_quelle_fuer():

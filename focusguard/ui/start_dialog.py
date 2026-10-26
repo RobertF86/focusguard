@@ -116,8 +116,14 @@ class StartDialog(QDialog):
         self._wartet.hide()
         if listen is None:
             return
+        # Was schon in den Feldern steht (etwa während der KI-Anfrage getippt), bleibt. Vorschläge kommen dazu,
+        # aber keiner, der schon in irgendeinem Feld steht, damit nichts deiner Eingabe widerspricht.
+        getippt = {name: [z.strip() for z in feld.toPlainText().splitlines() if z.strip()]
+                   for name, feld in self._listen_felder.items()}
+        vorhanden = {z.lower() for zeilen in getippt.values() for z in zeilen}
         for name, feld in self._listen_felder.items():
-            feld.setPlainText("\n".join(getattr(listen, name)))
+            zeilen = getippt[name] + [w for w in getattr(listen, name) if w.lower() not in vorhanden]
+            feld.setPlainText("\n".join(zeilen))
 
     def _lies_liste(self, name: str) -> tuple[str, ...]:
         werte: list[str] = []

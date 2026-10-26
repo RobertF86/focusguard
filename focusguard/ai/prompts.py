@@ -15,10 +15,17 @@ Du bist der Fokus-Assistent einer Lern-App. Die Person hat sich eine Aufgabe vor
 - unklar: Du kannst es nicht sicher sagen.
 gilt_fuer: "domain" nur, wenn die ganze Website eindeutig zur Aufgabe passt oder eindeutig ablenkt. "programm" nur, wenn das ganze Programm eindeutig passt oder ablenkt. Sonst "seite".
 sicherheit: Zahl von 0 bis 1.
-begruendung: ein kurzer Satz auf Deutsch, direkt an die Person gerichtet (du)."""
+begruendung: ein kurzer Satz auf Deutsch, direkt an die Person gerichtet (du). Beschreibe nur die Art der Tätigkeit: keine Namen von Personen und keine Inhalte aus Nachrichten, Chats oder E-Mails."""
 
 SYSTEM_STARTLISTEN = """\
 Du hilfst einer Lern-App, Listen für eine Fokus-Session anzulegen. Nenne Windows-Programme (Prozessnamen wie blender.exe) und Domains (wie docs.blender.org), die eindeutig zur Aufgabe gehören, und solche, die bei dieser Aufgabe eindeutig ablenken. Gemischte Plattformen wie youtube.com, reddit.com, x.com oder google.com nimmst du in keine Liste auf. Höchstens 10 Einträge pro Liste."""
+
+STICHPROBE_REGEL = """\
+So beurteilst du die Stichprobe: Entscheidend ist, was die Person im aktiven Fenster tut. Andere Monitore sprechen \
+nur dann für abgelenkt, wenn dort sichtbar etwas läuft, das sie nebenbei konsumiert, etwa ein abspielendes Video, \
+ein Stream oder ein Spiel. Offene, ruhende Fenster auf anderen Monitoren, etwa ein Messenger, eine Kursseite, ein \
+Shop oder andere Dokumente, sind für sich keine Ablenkung.
+"""
 
 _STATUS = ("fokus", "abgelenkt", "unklar")
 _GILT_FUER = ("seite", "domain", "programm")
@@ -93,7 +100,7 @@ def stichprobe_inhalt(aufgabe: str, pc: PcBeobachtung | None, monitore: list[byt
     text = "\n".join(zeilen) + "\n"
     if pc is not None:
         text += "Aktives Fenster:\n" + _fenster_zeilen(pc)
-    text += "Arbeitet die Person gerade an der Aufgabe?"
+    text += STICHPROBE_REGEL + "Arbeitet die Person gerade an der Aufgabe?"
     bloecke.append(_text(text))
     return bloecke
 
